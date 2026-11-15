@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="google" content="notranslate">
 <title>Tibiis Estoque</title>
+<link rel="icon" href="tibiismania-logo.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -89,10 +90,42 @@ input:focus,select:focus,textarea:focus{outline:2px solid #9cc3b0;border-color:t
 .planilha tr.venc td{color:var(--red)}.planilha tr.pago td{color:var(--mut)}
 .scroll{overflow-x:auto;margin-bottom:14px}
 h3{font-size:15px;margin:16px 0 8px}
+
+/* ===== tema Tibii's ===== */
+:root{--bg:#fff8f1;--line:#f1e2cf;--pri:#f07f12;--pri2:#d46a00;--ink:#26221d;--mut:#7a6f62}
+body{background:linear-gradient(180deg,#fff3e4 0,#fff8f1 260px)}
+.topo{background:#fff;border-bottom:4px solid var(--pri);position:sticky;top:0;z-index:5;box-shadow:0 2px 14px rgba(240,127,18,.12)}
+.marca{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:800}
+.marca img{height:46px;width:auto;display:block}
+.marca small{color:var(--mut)}
+.abas button{background:#fff;border-color:var(--line);font-weight:600}
+.abas button:hover{border-color:var(--pri);color:var(--pri2)}
+.abas button.on{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 3px 10px rgba(240,127,18,.35)}
+button.primary{background:var(--pri);border-color:var(--pri);font-weight:600;box-shadow:0 2px 8px rgba(240,127,18,.28)}
+button.primary:hover{background:var(--pri2);border-color:var(--pri2)}
+button.link{color:var(--pri2)}
+input:focus,select:focus,textarea:focus{outline:2px solid #ffc38a}
+.kpi{border:1px solid var(--line);border-left:5px solid var(--pri);box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.kpi .n{color:var(--ink)}
+.card{border-color:var(--line);box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .15s,border-color .15s}
+.card.click:hover{border-color:var(--pri);box-shadow:0 4px 14px rgba(240,127,18,.15)}
+.b-pap{color:#b45309;background:#ffedd5}
+.total{background:#fff1e0;border:1px solid #fbd9b0}
+.planilha{border-color:var(--line)}
+.planilha th{background:#fff1e0;color:#8a5a22}
+.planilha tr:hover td{background:#fffaf4}
+.vazio{border-color:#f3c999;background:#fffdf9}
+.modal{border-top:5px solid var(--pri)}
+.login{border:1px solid var(--line);border-top:6px solid var(--pri);box-shadow:0 12px 40px rgba(240,127,18,.15);text-align:left}
+.login .logo{display:block;width:210px;max-width:80%;margin:0 auto 6px}
+.login h1{text-align:center;font-size:20px;color:var(--pri2)}
+.login .sub{text-align:center}
+.toast{background:var(--ink);border-left:4px solid var(--pri)}
+@media (max-width:560px){.marca img{height:36px}.marca{font-size:16px}}
 </style>
 </head>
 <body>
-<div id="app"><div class="login"><h1>Tibiis Estoque</h1><div class="sub">Carregando…</div></div></div>
+<div id="app"><div class="login"><img class="logo" src="tibiismania-logo.jpg" alt="Tibii's"><h1>Tibiis Estoque</h1><div class="sub">Carregando…</div></div></div>
 <div id="ov" class="ov hidden"><div id="modal" class="modal"></div></div>
 <div id="toast" class="toast hidden"></div>
 <script>
@@ -145,7 +178,7 @@ async function rodar(btn,fn){const err=$('modal').querySelector('.erro');if(err)
 // ---------- autenticação ----------
 function telaLogin(msg){
   const cad=modoLogin==='criar',rec=modoLogin==='esqueci';
-  $('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1>
+  $('app').innerHTML=`<div class="login"><img class="logo" src="tibiismania-logo.jpg" alt="Tibii's"><h1>Tibiis Estoque</h1>
   <div class="sub">${cad?'Crie sua conta de acesso.':rec?'Vamos enviar um link para criar uma nova senha.':'Entre com seu e-mail e senha.'}</div>
   <form id="fl">
     ${cad?'<div class="campo"><label>Seu nome</label><input id="l_nome" autocomplete="name" required></div>':''}
@@ -169,7 +202,7 @@ function telaLogin(msg){
   };
 }
 function telaPendente(){
-  $('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1><div class="sub">Olá, ${esc(perfil?.nome||sessao.user.email)}.</div>
+  $('app').innerHTML=`<div class="login"><img class="logo" src="tibiismania-logo.jpg" alt="Tibii's"><h1>Tibiis Estoque</h1><div class="sub">Olá, ${esc(perfil?.nome||sessao.user.email)}.</div>
   <p class="passo">Sua conta foi criada e está aguardando liberação do administrador.</p>
   <p class="passo" style="color:var(--mut)">Assim que o acesso for liberado, toque em "Verificar de novo".</p>
   <button class="primary" id="pv" style="width:100%">Verificar de novo</button>
@@ -195,7 +228,7 @@ async function iniciar(){
 }
 async function carregarPerfil(){
   const {data,error}=await sb.from('perfis').select('*').eq('user_id',sessao.user.id).maybeSingle();
-  if(error){$('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1><p class="erro">Não foi possível carregar seu acesso. Tente recarregar a página.</p></div>`;return;}
+  if(error){$('app').innerHTML=`<div class="login"><img class="logo" src="tibiismania-logo.jpg" alt="Tibii's"><h1>Tibiis Estoque</h1><p class="erro">Não foi possível carregar seu acesso. Tente recarregar a página.</p></div>`;return;}
   perfil=data;
   if(!perfil||!perfil.papel)return telaPendente();
   if(!aba)aba=perfil.papel==='sp'?'remessas':'cuiaba';
@@ -242,7 +275,7 @@ function render(){
   const abas=abasDoPapel();if(!abas.find(x=>x[0]===aba))aba=abas[0][0];
   const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,notas:abaNotas,usuarios:abaUsuarios,acessos:abaAcessos,whatsapp:abaWhats}[aba]();
   const ativo=document.activeElement&&document.activeElement.id==='busca';const pos=ativo?document.activeElement.selectionStart:0;
-  $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca">Tibiis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div>
+  $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca"><img src="tibiismania-logo.jpg" alt="Tibii's"><div>Tibiis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div></div>
     <div class="quem"><span>${esc(perfil.nome||perfil.email)}</span><span class="badge b-pap">${PAPEIS[perfil.papel]}</span>
     <button class="small" data-act="atualizar">Atualizar</button><button class="small" data-act="sair">Sair</button></div></div></div>
     <div class="wrap"><nav class="abas">${abas.map(([k,l])=>`<button class="${aba===k?'on':''}" data-aba="${k}">${l}</button>`).join('')}</nav>${conteudo}</div>`;
