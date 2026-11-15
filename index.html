@@ -100,7 +100,7 @@ const SUPABASE_URL='https://dufwrtancqquwdsqbjms.supabase.co';
 const SUPABASE_KEY='sb_publishable_Yz7FsB9rbjQOlhI2cVfuFg_xwdAtaSH';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
-const PAPEIS={admin:'Administrador',cuiaba:'Cuiabá',sp:'São Paulo'};
+const PAPEIS={admin:'Administrador',cuiaba:'Cuiabá',sp:'São Paulo',socio:'Sócio (só visualização)'};
 const DESTINOS=['Full Mercado Livre','Full Amazon (FBA)','Outro'];
 let sessao=null,perfil=null,aba=null,busca='',filtroRem='rota',D={produtos:[],remessas:[],entradas:[],perfis:[],notas:[],boletos:[]},modoLogin='entrar',carregando=false;
 
@@ -118,6 +118,7 @@ function um(x){return Array.isArray(x)?x[0]||null:x||null;}
 function val(id){const e=$(id);return e?e.value.trim():'';}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.add('hidden'),3000);}
 function podeCusto(){return perfil&&['admin','cuiaba'].includes(perfil.papel);}
+function verCusto(){return perfil&&['admin','cuiaba','socio'].includes(perfil.papel);}
 function podeSP(){return perfil&&['admin','sp'].includes(perfil.papel);}
 function ehAdmin(){return perfil&&perfil.papel==='admin';}
 function nomeDe(uid){const p=D.perfis.find(x=>x.user_id===uid);return p?(p.nome||p.email):'';}
@@ -207,7 +208,7 @@ async function carregar(){
     const reqs=[sb.from('produtos').select('id,nome,sku,produtos_custo(qtd_cuiaba,custo_medio)').order('nome'),
       sb.from('remessas').select(sel).order('id',{ascending:false}).limit(400),
       sb.from('perfis').select('*').order('nome')];
-    if(podeCusto()){reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(2000));
+    if(verCusto()){reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(2000));
       reqs.push(sb.from('notas').select('*').order('emissao',{ascending:false}).limit(500));
       reqs.push(sb.from('boletos').select('*').order('vencimento').limit(3000));}
     const r=await Promise.all(reqs);
@@ -224,9 +225,9 @@ function itensRem(r){return (r.remessa_itens||[]).map(i=>{const enc=(i.encaminha
 // ---------- tela principal ----------
 function abasDoPapel(){
   const a=[];
-  if(podeCusto())a.push(['cuiaba','Estoque Cuiabá']);
+  if(verCusto())a.push(['cuiaba','Estoque Cuiabá']);
   a.push(['remessas','Remessas']);a.push(['sp','Estoque SP']);
-  if(podeCusto()){a.push(['entradas','Entradas']);a.push(['notas','Notas e boletos']);}
+  if(verCusto()){a.push(['entradas','Entradas']);a.push(['notas','Notas e boletos']);}
   if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['whatsapp','WhatsApp']);}
   return a;
 }
@@ -249,7 +250,7 @@ function abaCuiaba(){
     .sort((a,b)=>(b.c.qtd_cuiaba>0)-(a.c.qtd_cuiaba>0)||a.nome.localeCompare(b.nome));
   const comEst=lst.filter(p=>p.c.qtd_cuiaba>0);
   const tu=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba,0),tv=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba*p.c.custo_medio,0);
-  return barraBusca('Buscar produto ou SKU…','<button class="primary" data-act="entrada">+ Entrada</button><button class="primary" data-act="remessa">+ Nova remessa</button>')+
+  return barraBusca('Buscar produto ou SKU…',podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button><button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
   `<div class="resumo"><div class="kpi"><div class="n">${un(comEst.length)}</div><div class="l">Produtos em estoque</div></div>
    <div class="kpi"><div class="n">${un(tu)}</div><div class="l">Unidades em Cuiabá</div></div>
    <div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div></div>
@@ -275,7 +276,7 @@ function cardRemessa(r){
   if(r.status==='recebida'){extra+=`<div class="meta">Chegou ${fd(r.data_chegada)} · recebido <b>${un(rec)}</b> de ${un(env)}</div>`;
     if(rec!==env)extra+=`<div class="warn">⚠ Divergência de ${un(env-rec)} un.</div>`;
     extra+=disp>0?`<div class="ok">${un(disp)} un. no depósito aguardando encaminhamento</div>`:`<div class="meta">Tudo encaminhado</div>`;}
-  if(c&&podeCusto())extra+=`<div class="meta">Frete ${brl(c.frete)} · ${brl(c.frete_unit,4)} por unidade</div>`;
+  if(c&&verCusto())extra+=`<div class="meta">Frete ${brl(c.frete)} · ${brl(c.frete_unit,4)} por unidade</div>`;
   return `<div class="card click" data-rem="${r.id}"><div><div class="t">Remessa #${r.id} ${badgeRem(r.status)}</div>
     <div class="meta">Saída ${fd(r.data_saida)}${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' vol.':''} · ${it.length} produto(s)</div>${extra}</div>
     <div class="dir"><div class="n">${un(env)} un.</div><button class="small">Abrir</button></div></div>`;
@@ -292,16 +293,16 @@ function abaSP(){
   const td=lst.reduce((s,x)=>s+x.dep,0),tc=lst.reduce((s,x)=>s+x.cam,0),tv=lst.reduce((s,x)=>s+x.custoTot,0);
   return barraBusca('Buscar produto ou SKU…')+`<div class="resumo"><div class="kpi"><div class="n">${un(td)}</div><div class="l">Unidades no depósito SP</div></div>
    <div class="kpi"><div class="n">${un(tc)}</div><div class="l">Unidades a caminho</div></div>
-   ${podeCusto()?`<div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor no depósito (custo SP)</div></div>`:''}</div>
+   ${verCusto()?`<div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor no depósito (custo SP)</div></div>`:''}</div>
   <div class="lista">${lst.length?lst.map(x=>`<div class="card"><div><div class="t">${esc(x.p.nome)}</div>
-    <div class="meta">${x.p.sku?'SKU/EAN '+esc(x.p.sku):''}${x.cam?(x.p.sku?' · ':'')+'<b>'+un(x.cam)+'</b> un. a caminho':''}${podeCusto()&&x.dep?' · Custo SP médio <b>'+brl(x.custoTot/x.dep,4)+'</b>':''}</div></div>
+    <div class="meta">${x.p.sku?'SKU/EAN '+esc(x.p.sku):''}${x.cam?(x.p.sku?' · ':'')+'<b>'+un(x.cam)+'</b> un. a caminho':''}${verCusto()&&x.dep?' · Custo SP médio <b>'+brl(x.custoTot/x.dep,4)+'</b>':''}</div></div>
     <div class="dir"><div class="n">${un(x.dep)} un.</div><div class="meta">no depósito</div></div></div>`).join('')
     :'<div class="vazio">Nenhuma mercadoria em SP ou a caminho.</div>'}</div>`;
 }
 
 function abaEntradas(){
   const lst=D.entradas.filter(e=>bate(produto(e.produto_id).nome,produto(e.produto_id).sku,e.nf));
-  return barraBusca('Buscar produto, SKU ou NF…','<button class="primary" data-act="entrada">+ Entrada</button>')+
+  return barraBusca('Buscar produto, SKU ou NF…',podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button>':'')+
   `<div class="lista">${lst.length?lst.map(e=>{const p=produto(e.produto_id);return `<div class="card"><div><div class="t">${esc(p.nome)}</div>
     <div class="meta">${fd(e.data)}${e.nf?' · NF '+esc(e.nf):''} · Custo unit. <b>${brl(e.custo_unit,4)}</b> · Custo médio ${brl(e.custo_medio_antes,4)} → <b>${brl(e.custo_medio_depois,4)}</b></div>
     <div class="meta">${nomeDe(e.criado_por)?'Lançado por '+esc(nomeDe(e.criado_por))+' · ':''}${fts(e.criado_em)}${e.obs?' · '+esc(e.obs):''}</div></div>
@@ -321,7 +322,7 @@ function abaNotas(){
   const notas=D.notas.filter(n=>bate(n.numero,n.fornecedor));
   const nota=id=>D.notas.find(n=>n.id===id)||{};
   const bols=D.boletos.filter(b=>bate(nota(b.nota_id).numero,nota(b.nota_id).fornecedor));
-  return barraBusca('Buscar nota ou fornecedor…','<button data-act="planilha">Baixar planilha</button><button class="primary" data-act="novanota">+ Nota</button>')+
+  return barraBusca('Buscar nota ou fornecedor…','<button data-act="planilha">Baixar planilha</button>'+(podeCusto()?'<button class="primary" data-act="novanota">+ Nota</button>':''))+
   `<div class="resumo"><div class="kpi"><div class="n">${brl(soma(ab))}</div><div class="l">Total a pagar (${ab.length} boletos)</div></div>
    <div class="kpi"><div class="n">${brl(soma(prox))}</div><div class="l">Vence em 30 dias</div></div>
    <div class="kpi"><div class="n" style="color:${venc.length?'var(--red)':'inherit'}">${brl(soma(venc))}</div><div class="l">Vencidos</div></div></div>
@@ -334,7 +335,7 @@ function abaNotas(){
   <h3>Boletos</h3>
   ${bols.length?`<div class="scroll"><table class="planilha"><tr><th>Vencimento</th><th>Fornecedor</th><th>NF</th><th>Parcela</th><th class="n">Valor</th><th>Situação</th><th></th></tr>
   ${bols.map(b=>{const n=nota(b.nota_id),v=!b.pago&&b.vencimento<hoje_;return `<tr class="${b.pago?'pago':v?'venc':''}"><td>${fd(b.vencimento)}</td><td>${esc(n.fornecedor||'')}</td><td>${esc(n.numero||'')}</td><td>${esc(b.parcela||'')}</td><td class="n">${brl(b.valor)}</td>
-    <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td><button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button></td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
+    <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td>${podeCusto()?`<button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button>`:''}</td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
 }
 function addDias(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);}
 function modalNota(id){
@@ -404,7 +405,7 @@ function abaWhats(){
   <div class="meta" style="margin-bottom:10px">Cada movimentação gera uma mensagem para os números abaixo: entrada na Tibiis, saída de remessa para SP, chegada em SP (com divergências), encaminhamentos e cancelamentos.</div>
   <div id="w_status" class="meta">Verificando…</div>
   <div class="duas" style="margin-top:10px"><div class="campo"><label>ID do número (Meta)</label><input id="w_pid" inputmode="numeric"></div>
-  <div class="campo"><label>Token de acesso (Meta)</label><input id="w_tok" type="password" autocomplete="off" placeholder="cole aqui · vazio mantém o atual"></div></div>
+  <div class="campo"><label>Token de acesso (Meta)</label><input id="w_tok" type="text" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="cole aqui · vazio mantém o atual"></div></div>
   <div class="campo"><label>Números que recebem os avisos (com 55 + DDD)</label>
   <div class="duas"><input id="w_d1" inputmode="numeric" placeholder="5511999999999"><input id="w_d2" inputmode="numeric" placeholder="5511999999999"></div>
   <div class="duas" style="margin-top:8px"><input id="w_d3" inputmode="numeric" placeholder="5511999999999"><input id="w_d4" inputmode="numeric" placeholder="5511999999999"></div></div>
@@ -492,7 +493,7 @@ function modalDetalhe(id){
   const r=D.remessas.find(x=>x.id===id);if(!r)return;
   const it=itensRem(r),c=um(r.remessas_custo);
   const linhas=it.map(i=>{const p=produto(i.produto_id);
-    const custo=i.custo&&podeCusto()?`<div class="meta">Custo Cuiabá ${brl(i.custo.custo_medio_saida,4)} + frete ${brl(i.custo.frete_unit,4)} = <b>custo SP ${brl(i.custo.custo_sp,4)}</b></div>`:'';
+    const custo=i.custo&&verCusto()?`<div class="meta">Custo Cuiabá ${brl(i.custo.custo_medio_saida,4)} + frete ${brl(i.custo.frete_unit,4)} = <b>custo SP ${brl(i.custo.custo_sp,4)}</b></div>`:'';
     const encs=(i.encaminhamentos||[]).slice().sort((a,b)=>a.id-b.id).map(e=>`<div class="enc"><span>→ <b>${un(e.qtd)}</b> un. ${esc(e.destino)}${e.conta?' ('+esc(e.conta)+')':''}${e.envio?' · envio '+esc(e.envio):''} · ${fd(e.data)}${nomeDe(e.criado_por)?' · '+esc(nomeDe(e.criado_por)):''}${e.obs?' · '+esc(e.obs):''}</span>${podeSP()?`<button class="small" data-desf="${e.id}" data-r="${r.id}">Desfazer</button>`:''}</div>`).join('');
     return `<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(p.nome)}</b>${p.sku?' <span class="meta">'+esc(p.sku)+'</span>':''}
       <div class="meta">Enviado <b>${un(i.qtd_enviada)}</b>${r.status==='recebida'?` · Recebido <b>${un(i.qtd_recebida)}</b> · Encaminhado ${un(i.enc)} · <b>No depósito ${un(i.disp)}</b>`:''}</div>
@@ -503,7 +504,7 @@ function modalDetalhe(id){
   <div class="sub">Saída ${fd(r.data_saida)} pela Carvalima${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' volume(s)':''} · ${un(env)} un.${nomeDe(r.criado_por)?' · por '+esc(nomeDe(r.criado_por)):''}
   ${r.status==='recebida'?`<br>Chegou em SP ${fd(r.data_chegada)}${nomeDe(r.recebido_por)?' · confirmado por '+esc(nomeDe(r.recebido_por)):''}${r.obs_chegada?' · '+esc(r.obs_chegada):''}`:''}
   ${r.obs?'<br>Obs.: '+esc(r.obs):''}</div>
-  ${c&&podeCusto()?`<div class="total">Frete Carvalima <b>${brl(c.frete)}</b> ÷ ${un(env)} un. = <b>${brl(c.frete_unit,4)} por unidade</b></div>`:''}
+  ${c&&verCusto()?`<div class="total">Frete Carvalima <b>${brl(c.frete)}</b> ÷ ${un(env)} un. = <b>${brl(c.frete_unit,4)} por unidade</b></div>`:''}
   ${linhas}<div class="erro"></div>
   <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}
   ${r.status==='em_rota'&&podeSP()?`<button class="primary" id="cheg">Confirmar chegada</button>`:''}<button id="cx">Fechar</button></div>`);
