@@ -130,7 +130,9 @@ function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesper
   if(/Password should be/i.test(m))return 'A senha precisa ter pelo menos 6 caracteres.';
   if(/rate limit/i.test(m))return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
   return m;}
-async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;return data;}
+const NOMES_ACAO={registrar_entrada:'Registrou entrada de mercadoria',criar_remessa:'Criou remessa para SP',cancelar_remessa:'Cancelou remessa',confirmar_chegada:'Confirmou chegada em SP',encaminhar:'Encaminhou mercadoria',desfazer_encaminhamento:'Desfez encaminhamento',salvar_nota:'Salvou nota fiscal',marcar_boleto:'Alterou boleto',excluir_nota:'Excluiu nota',definir_papel:'Alterou acesso de usuário',salvar_whatsapp:'Alterou configuração do WhatsApp',testar_whatsapp:'Testou WhatsApp',ativar_numero:'Ativou número WhatsApp',zerar_tudo:'Zerou o sistema'};
+function log(ev,d){try{sb.rpc('registrar_acesso',{p_evento:ev,p_detalhe:d==null?null:String(d).slice(0,300)}).then(()=>{},()=>{});}catch(e){}}
+async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;log('acao',NOMES_ACAO[fn]||fn);return data;}
 
 // ---------- modal ----------
 function abrir(html){$('modal').innerHTML=html;$('ov').classList.remove('hidden');const f=$('modal').querySelector('input:not([type=hidden]),select,textarea');if(f&&window.innerWidth>700)setTimeout(()=>f.focus(),30);}
@@ -197,6 +199,7 @@ async function carregarPerfil(){
   perfil=data;
   if(!perfil||!perfil.papel)return telaPendente();
   if(!aba)aba=perfil.papel==='sp'?'remessas':'cuiaba';
+  if(!window._logou){window._logou=1;log('entrou','Entrou no sistema');}
   await carregar();
 }
 
@@ -211,13 +214,16 @@ async function carregar(){
     if(verCusto()){reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(2000));
       reqs.push(sb.from('notas').select('*').order('emissao',{ascending:false}).limit(500));
       reqs.push(sb.from('boletos').select('*').order('vencimento').limit(3000));}
+    const pa=ehAdmin()?sb.from('acessos').select('*').order('id',{ascending:false}).limit(800):null;
     const r=await Promise.all(reqs);
     const e=r.find(x=>x.error);if(e)throw e.error;
     D.produtos=r[0].data;D.remessas=r[1].data;D.perfis=r[2].data;D.entradas=r[3]?r[3].data:[];D.notas=r[4]?r[4].data:[];D.boletos=r[5]?r[5].data:[];
+    if(pa){const x=await pa;D.acessos=x.data||[];}
   }catch(e){console.error(e);toast('Não foi possível atualizar os dados.');}
   carregando=false;render();
 }
 setInterval(()=>{if(perfil&&perfil.papel&&$('ov').classList.contains('hidden')&&document.visibilityState==='visible')carregar();},60000);
+setInterval(()=>{if(perfil&&document.visibilityState==='visible')sb.rpc('pulso').then(()=>{},()=>{});},50000);
 
 function itensRem(r){return (r.remessa_itens||[]).map(i=>{const enc=(i.encaminhamentos||[]).reduce((s,e)=>s+e.qtd,0);
   return {...i,custo:um(i.remessa_itens_custo),enc,disp:r.status==='recebida'?(i.qtd_recebida||0)-enc:0};});}
@@ -228,13 +234,13 @@ function abasDoPapel(){
   if(verCusto())a.push(['cuiaba','Estoque Cuiabá']);
   a.push(['remessas','Remessas']);a.push(['sp','Estoque SP']);
   if(verCusto()){a.push(['entradas','Entradas']);a.push(['notas','Notas e boletos']);}
-  if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['whatsapp','WhatsApp']);}
+  if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['acessos','Acessos']);a.push(['whatsapp','WhatsApp']);}
   return a;
 }
 function render(){
   if(!perfil||!perfil.papel)return;
   const abas=abasDoPapel();if(!abas.find(x=>x[0]===aba))aba=abas[0][0];
-  const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,notas:abaNotas,usuarios:abaUsuarios,whatsapp:abaWhats}[aba]();
+  const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,notas:abaNotas,usuarios:abaUsuarios,acessos:abaAcessos,whatsapp:abaWhats}[aba]();
   const ativo=document.activeElement&&document.activeElement.id==='busca';const pos=ativo?document.activeElement.selectionStart:0;
   $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca">Tibiis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div>
     <div class="quem"><span>${esc(perfil.nome||perfil.email)}</span><span class="badge b-pap">${PAPEIS[perfil.papel]}</span>
@@ -338,7 +344,7 @@ function abaNotas(){
     <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td>${podeCusto()?`<button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button>`:''}</td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
 }
 function addDias(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);}
-function modalNota(id){
+function modalNota(id){log('abriu','Nota fiscal '+((D.notas.find(n=>n.id===id)||{}).numero||id));
   const n=D.notas.find(x=>x.id===id);if(!n)return;const c=conferencia(n);
   abrir(`<h2>NF ${esc(n.numero)} — ${esc(n.fornecedor)}</h2><div class="sub">Emissão ${fd(n.emissao)}${n.cnpj?' · CNPJ '+esc(n.cnpj):''}${n.obs?' · '+esc(n.obs):''}</div>
   <div class="total">Produtos ${brl(n.valor_produtos)} − desconto ${brl(n.desconto)} = <b>total ${brl(n.valor_total)}</b><br>
@@ -375,7 +381,7 @@ function modalNovaNota(){
       valor_produtos:dinheiro(val('nn_vp'))||0,desconto:dinheiro(val('nn_ds'))||0,valor_total:vt,obs:val('nn_obs'),boletos:bols}});
       toast('Nota cadastrada.');await carregar();fechar();});};
 }
-function baixarPlanilha(){
+function baixarPlanilha(){log('acao','Baixou planilha de notas e boletos');
   const q=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
   const nb=x=>Number(x||0).toFixed(2).replace('.',',');
   const L=[];const nota=id=>D.notas.find(n=>n.id===id)||{};
@@ -390,15 +396,27 @@ function baixarPlanilha(){
 }
 
 function abaUsuarios(){
-  return `<div class="total" style="margin-top:10px">Para dar acesso a alguém: peça para a pessoa abrir este site, tocar em <b>Criar conta</b> e confirmar o e-mail. Depois ela aparece aqui e você escolhe o acesso.</div>
+  return `<div class="total" style="margin-top:10px">Para dar acesso a alguém: peça para a pessoa abrir este site e tocar em <b>Criar conta</b>. Depois ela aparece aqui e você escolhe o acesso. Sócios pré-aprovados já entram liberados.</div>
   <div class="lista">${D.perfis.map(p=>`<div class="card"><div><div class="t">${esc(p.nome||'')}</div><div class="meta">${esc(p.email||'')}</div>
     ${p.papel?'':'<div class="warn">Aguardando liberação</div>'}</div>
     <div><select data-papel="${p.user_id}" style="min-width:150px">
       <option value="">Sem acesso</option>${Object.entries(PAPEIS).map(([k,l])=>`<option value="${k}" ${p.papel===k?'selected':''}>${l}</option>`).join('')}
     </select></div></div>`).join('')}</div>
-  <div class="meta" style="margin-top:10px"><b>Administrador:</b> vê e faz tudo. <b>Cuiabá:</b> entradas, custo médio e remessas. <b>São Paulo:</b> vê as remessas e as quantidades, confirma a chegada e encaminha. Não vê custo, frete nem NF.</div>`;
+  <div class="meta" style="margin-top:10px"><b>Administrador:</b> vê e faz tudo. <b>Cuiabá:</b> entradas, custo médio e remessas. <b>São Paulo:</b> vê as remessas e as quantidades, confirma a chegada e encaminha. Não vê custo, frete nem NF. <b>Sócio:</b> vê tudo, não altera nada.</div>`;
 }
 
+let filtroAc='';
+function abaAcessos(){
+  const agora=Date.now();const on=D.perfis.filter(p=>p.ultimo_acesso&&agora-new Date(p.ultimo_acesso).getTime()<180000);
+  const nomeU=id=>{const p=D.perfis.find(x=>x.user_id===id);return p?(p.nome||p.email):'—';};
+  const txt=a=>a.evento==='aba'?'Abriu a aba <b>'+esc(a.detalhe)+'</b>':a.evento==='acao'?'<b>'+esc(a.detalhe)+'</b>':a.evento==='abriu'?'Abriu '+esc(a.detalhe):a.evento==='entrou'?'Entrou no sistema':esc(a.evento+' '+(a.detalhe||''));
+  const lst=(D.acessos||[]).filter(a=>!filtroAc||a.user_id===filtroAc);
+  const ult=p=>p.ultimo_acesso?new Date(p.ultimo_acesso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'nunca';
+  return `<div class="total" style="margin-top:10px"><b>Online agora (${on.length}):</b> ${on.length?on.map(p=>'🟢 '+esc(p.nome||p.email)).join(' · '):'ninguém além de você'}</div>
+  <div class="lista">${D.perfis.filter(p=>p.papel).map(p=>`<div class="card"><div><div class="t">${esc(p.nome||p.email)}</div><div class="meta">${esc(p.email)} · ${PAPEIS[p.papel]||''}</div></div><div class="meta">Último acesso: <b>${ult(p)}</b></div></div>`).join('')}</div>
+  <div class="barra" style="margin-top:14px"><select id="filtroAc"><option value="">Todas as pessoas</option>${D.perfis.map(p=>`<option value="${p.user_id}" ${filtroAc===p.user_id?'selected':''}>${esc(p.nome||p.email)}</option>`).join('')}</select></div>
+  ${lst.length?`<div class="scroll"><table class="planilha"><tr><th>Data e hora</th><th>Pessoa</th><th>O que fez</th></tr>${lst.map(a=>`<tr><td>${new Date(a.em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(nomeU(a.user_id))}</td><td>${txt(a)}</td></tr>`).join('')}</table></div>`:'<div class="vazio">Nenhum registro ainda.</div>'}`;
+}
 function abaWhats(){
   setTimeout(carregarWhats,0);
   return `<div class="item" style="background:#fff;margin-top:10px"><div class="t" style="font-weight:600;margin-bottom:6px">Avisos no WhatsApp (API oficial)</div>
@@ -489,7 +507,7 @@ function modalRemessa(){
       toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();fechar();});};
 }
 
-function modalDetalhe(id){
+function modalDetalhe(id){log('abriu','Remessa #'+id);
   const r=D.remessas.find(x=>x.id===id);if(!r)return;
   const it=itensRem(r),c=um(r.remessas_custo);
   const linhas=it.map(i=>{const p=produto(i.produto_id);
@@ -560,7 +578,7 @@ $('app').addEventListener('click',async e=>{
   const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol]');if(!t)return;
   if(t.dataset.nota){modalNota(+t.dataset.nota);return;}
   if(t.dataset.bol){t.disabled=true;try{await rpc('marcar_boleto',{p_id:+t.dataset.bol,p_pago:t.dataset.pg==='1'});await carregar();}catch(err){toast(msgErro(err));t.disabled=false;}return;}
-  if(t.dataset.aba){aba=t.dataset.aba;busca='';render();return;}
+  if(t.dataset.aba){aba=t.dataset.aba;busca='';log('aba',t.textContent.trim());render();return;}
   if(t.dataset.fr){filtroRem=t.dataset.fr;render();return;}
   if(t.dataset.rem){modalDetalhe(+t.dataset.rem);return;}
   const a=t.dataset.act;
@@ -575,7 +593,7 @@ $('app').addEventListener('click',async e=>{
   if(a==='testewhats'){t.disabled=true;try{await rpc('testar_whatsapp');toast('Teste enviado. Confira os celulares.');setTimeout(carregarWhats,4000);}catch(err){toast(msgErro(err));}t.disabled=false;}
 });
 $('app').addEventListener('input',e=>{if(e.target.id==='busca'){busca=e.target.value;render();}});
-$('app').addEventListener('change',async e=>{const s=e.target.closest('[data-papel]');if(!s)return;
+$('app').addEventListener('change',async e=>{if(e.target.id==='filtroAc'){filtroAc=e.target.value;render();return;}const s=e.target.closest('[data-papel]');if(!s)return;
   try{await rpc('definir_papel',{p_user:s.dataset.papel,p_papel:s.value||null});toast('Acesso atualizado.');await carregar();}
   catch(err){toast(msgErro(err));await carregar();}});
 
