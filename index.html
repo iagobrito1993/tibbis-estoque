@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="google" content="notranslate">
-<title>Tibbis Estoque</title>
+<title>Tibiis Estoque</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -85,7 +85,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid #9cc3b0;border-color:t
 </style>
 </head>
 <body>
-<div id="app"><div class="login"><h1>Tibbis Estoque</h1><div class="sub">Carregando…</div></div></div>
+<div id="app"><div class="login"><h1>Tibiis Estoque</h1><div class="sub">Carregando…</div></div></div>
 <div id="ov" class="ov hidden"><div id="modal" class="modal"></div></div>
 <div id="toast" class="toast hidden"></div>
 <script>
@@ -135,7 +135,7 @@ async function rodar(btn,fn){const err=$('modal').querySelector('.erro');if(err)
 // ---------- autenticação ----------
 function telaLogin(msg){
   const cad=modoLogin==='criar',rec=modoLogin==='esqueci';
-  $('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1>
+  $('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1>
   <div class="sub">${cad?'Crie sua conta de acesso.':rec?'Vamos enviar um link para criar uma nova senha.':'Entre com seu e-mail e senha.'}</div>
   <form id="fl">
     ${cad?'<div class="campo"><label>Seu nome</label><input id="l_nome" autocomplete="name" required></div>':''}
@@ -159,7 +159,7 @@ function telaLogin(msg){
   };
 }
 function telaPendente(){
-  $('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1><div class="sub">Olá, ${esc(perfil?.nome||sessao.user.email)}.</div>
+  $('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1><div class="sub">Olá, ${esc(perfil?.nome||sessao.user.email)}.</div>
   <p class="passo">Sua conta foi criada e está aguardando liberação do administrador.</p>
   <p class="passo" style="color:var(--mut)">Assim que o acesso for liberado, toque em "Verificar de novo".</p>
   <button class="primary" id="pv" style="width:100%">Verificar de novo</button>
@@ -185,7 +185,7 @@ async function iniciar(){
 }
 async function carregarPerfil(){
   const {data,error}=await sb.from('perfis').select('*').eq('user_id',sessao.user.id).maybeSingle();
-  if(error){$('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1><p class="erro">Não foi possível carregar seu acesso. Tente recarregar a página.</p></div>`;return;}
+  if(error){$('app').innerHTML=`<div class="login"><h1>Tibiis Estoque</h1><p class="erro">Não foi possível carregar seu acesso. Tente recarregar a página.</p></div>`;return;}
   perfil=data;
   if(!perfil||!perfil.papel)return telaPendente();
   if(!aba)aba=perfil.papel==='sp'?'remessas':'cuiaba';
@@ -226,7 +226,7 @@ function render(){
   const abas=abasDoPapel();if(!abas.find(x=>x[0]===aba))aba=abas[0][0];
   const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,usuarios:abaUsuarios,whatsapp:abaWhats}[aba]();
   const ativo=document.activeElement&&document.activeElement.id==='busca';const pos=ativo?document.activeElement.selectionStart:0;
-  $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca">Tibbis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div>
+  $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca">Tibiis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div>
     <div class="quem"><span>${esc(perfil.nome||perfil.email)}</span><span class="badge b-pap">${PAPEIS[perfil.papel]}</span>
     <button class="small" data-act="atualizar">Atualizar</button><button class="small" data-act="sair">Sair</button></div></div></div>
     <div class="wrap"><nav class="abas">${abas.map(([k,l])=>`<button class="${aba===k?'on':''}" data-aba="${k}">${l}</button>`).join('')}</nav>${conteudo}</div>`;
@@ -247,7 +247,7 @@ function abaCuiaba(){
   <div class="lista">${lst.length?lst.map(p=>`<div class="card" style="${p.c.qtd_cuiaba>0?'':'opacity:.55'}"><div><div class="t">${esc(p.nome)}</div>
     <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku)+' · ':''}Custo médio <b>${brl(p.c.custo_medio,4)}</b></div></div>
     <div class="dir"><div class="n">${un(p.c.qtd_cuiaba)} un.</div><div class="meta">${brl(p.c.qtd_cuiaba*p.c.custo_medio)}</div></div></div>`).join('')
-    :`<div class="vazio">${D.produtos.length?'Nada encontrado.':'Nenhum produto ainda. Toque em <b>+ Entrada</b> quando a mercadoria chegar na Tibbis.'}</div>`}</div>`;
+    :`<div class="vazio">${D.produtos.length?'Nada encontrado.':'Nenhum produto ainda. Toque em <b>+ Entrada</b> quando a mercadoria chegar na Tibiis.'}</div>`}</div>`;
 }
 
 function abaRemessas(){
@@ -310,19 +310,32 @@ function abaUsuarios(){
 }
 
 function abaWhats(){
-  setTimeout(async()=>{try{const w=await rpc('ler_whatsapp');const s=$('w_status');if(s)s.innerHTML=w&&w.configurado?`<span class="ok">Ativo no número ${esc(w.fone)}</span>`:'<span class="warn">Ainda não configurado</span>';if(w&&w.fone&&$('w_fone')&&!$('w_fone').value)$('w_fone').value=w.fone;}catch(e){}},0);
-  return `<div class="item" style="background:#fff;margin-top:10px"><div class="t" style="font-weight:600;margin-bottom:6px">Avisos no WhatsApp</div>
-  <div class="meta" style="margin-bottom:10px">Você recebe uma mensagem quando: entra mercadoria na Tibbis, sai uma remessa, a remessa chega em SP (com aviso de divergência) e quando SP encaminha mercadoria.</div>
+  setTimeout(carregarWhats,0);
+  return `<div class="item" style="background:#fff;margin-top:10px"><div class="t" style="font-weight:600;margin-bottom:6px">Avisos no WhatsApp (API oficial)</div>
+  <div class="meta" style="margin-bottom:10px">Cada movimentação gera uma mensagem para os números abaixo: entrada na Tibiis, saída de remessa para SP, chegada em SP (com divergências), encaminhamentos e cancelamentos.</div>
   <div id="w_status" class="meta">Verificando…</div>
-  <div class="duas" style="margin-top:10px"><div class="campo"><label>Seu WhatsApp (com 55 e DDD)</label><input id="w_fone" inputmode="numeric" placeholder="5511999999999"></div>
-  <div class="campo"><label>Chave (apikey)</label><input id="w_key" placeholder="deixe vazio para manter a atual"></div></div>
-  <div class="rodape"><button class="primary" data-act="salvarwhats">Salvar e enviar teste</button></div></div>`;
+  <div class="duas" style="margin-top:10px"><div class="campo"><label>ID do número (Meta)</label><input id="w_pid" inputmode="numeric"></div>
+  <div class="campo"><label>Token de acesso (Meta)</label><input id="w_tok" type="password" autocomplete="off" placeholder="cole aqui · vazio mantém o atual"></div></div>
+  <div class="campo"><label>Números que recebem os avisos (com 55 + DDD)</label>
+  <div class="duas"><input id="w_d1" inputmode="numeric" placeholder="5511999999999"><input id="w_d2" inputmode="numeric" placeholder="5511999999999"></div>
+  <div class="duas" style="margin-top:8px"><input id="w_d3" inputmode="numeric" placeholder="5511999999999"><input id="w_d4" inputmode="numeric" placeholder="5511999999999"></div></div>
+  <div class="rodape"><button data-act="testewhats">Enviar teste</button><button class="primary" data-act="salvarwhats">Salvar</button></div>
+  <div class="t" style="font-weight:600;margin:14px 0 6px">Últimos envios</div><div id="w_log" class="meta">—</div></div>`;
+}
+async function carregarWhats(){
+  try{const w=await rpc('ler_whatsapp');const s=$('w_status');if(!s)return;
+    const ds=(w&&w.destinos)||[];
+    s.innerHTML=w&&w.token_ok&&ds.length?`<span class="ok">Ativo · enviando para ${ds.length} número(s)</span>`:'<span class="warn">Falta configurar '+(!(w&&w.token_ok)?'o token':'os números')+'</span>';
+    if(w&&w.phone_id&&!$('w_pid').value)$('w_pid').value=w.phone_id;
+    ds.forEach((d,i)=>{const e=$('w_d'+(i+1));if(e&&!e.value)e.value=d;});
+  }catch(e){}
+  try{const l=await rpc('ultimos_envios');const el=$('w_log');if(el)el.innerHTML=(l&&l.length)?l.map(x=>`<div>${fts(x.em)} · ${x.status==200?'<span class="ok">enviado</span>':'<span class="warn">erro '+esc(x.status||'')+'</span> '+esc(x.resposta||'')}</div>`).join(''):'Nenhum envio ainda.';}catch(e){}
 }
 
 // ---------- ações / modais ----------
 function modalEntrada(){
   const opts=D.produtos.map(p=>`<option value="${esc(p.nome+(p.sku?' · '+p.sku:''))}">`).join('');
-  abrir(`<h2>Entrada na Tibbis Atacado</h2><div class="sub">Mercadoria que chegou em Cuiabá. O custo médio é recalculado automaticamente.</div>
+  abrir(`<h2>Entrada na Tibiis Atacado</h2><div class="sub">Mercadoria que chegou em Cuiabá. O custo médio é recalculado automaticamente.</div>
   <div class="campo"><label>Produto</label><input id="e_prod" list="dl_prod" placeholder="Busque um produto ou digite um novo"><datalist id="dl_prod">${opts}</datalist></div>
   <div class="campo" id="c_sku"><label>SKU / EAN</label><input id="e_sku"></div>
   <div class="tres"><div class="campo"><label>Quantidade</label><input id="e_qtd" inputmode="numeric"></div>
@@ -460,7 +473,8 @@ $('app').addEventListener('click',async e=>{
   if(a==='atualizar'){await carregar();toast('Atualizado.');}
   if(a==='entrada')modalEntrada();
   if(a==='remessa')modalRemessa();
-  if(a==='salvarwhats'){t.disabled=true;try{await rpc('salvar_whatsapp',{p_fone:val('w_fone'),p_apikey:val('w_key')});toast('Salvo. Uma mensagem de teste foi enviada.');render();}catch(err){toast(msgErro(err));t.disabled=false;}}
+  if(a==='salvarwhats'){t.disabled=true;try{await rpc('salvar_whatsapp',{p_phone_id:val('w_pid'),p_token:$('w_tok').value,p_destinos:[1,2,3,4].map(i=>val('w_d'+i)).filter(Boolean)});$('w_tok').value='';toast('Configuração salva.');await carregarWhats();}catch(err){toast(msgErro(err));}t.disabled=false;}
+  if(a==='testewhats'){t.disabled=true;try{await rpc('testar_whatsapp');toast('Teste enviado. Confira os celulares.');setTimeout(carregarWhats,4000);}catch(err){toast(msgErro(err));}t.disabled=false;}
 });
 $('app').addEventListener('input',e=>{if(e.target.id==='busca'){busca=e.target.value;render();}});
 $('app').addEventListener('change',async e=>{const s=e.target.closest('[data-papel]');if(!s)return;
