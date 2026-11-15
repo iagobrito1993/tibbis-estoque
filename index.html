@@ -409,6 +409,9 @@ function abaWhats(){
   <div class="duas"><input id="w_d1" inputmode="numeric" placeholder="5511999999999"><input id="w_d2" inputmode="numeric" placeholder="5511999999999"></div>
   <div class="duas" style="margin-top:8px"><input id="w_d3" inputmode="numeric" placeholder="5511999999999"><input id="w_d4" inputmode="numeric" placeholder="5511999999999"></div></div>
   <div class="rodape"><button data-act="testewhats">Enviar teste</button><button class="primary" data-act="salvarwhats">Salvar</button></div>
+  <div class="t" style="font-weight:600;margin:14px 0 6px">Ativar o número para envio (uma vez só)</div>
+  <div class="meta" style="margin-bottom:8px">Depois de salvar o token, crie um PIN de 6 números (guarde-o: é a verificação em duas etapas do número) e clique em Ativar.</div>
+  <div class="duas"><input id="w_pin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="PIN de 6 números"><button data-act="ativarnum">Ativar número</button></div>
   <div class="t" style="font-weight:600;margin:14px 0 6px">Últimos envios</div><div id="w_log" class="meta">—</div></div>`;
 }
 async function carregarWhats(){
@@ -567,6 +570,7 @@ $('app').addEventListener('click',async e=>{
   if(a==='novanota')modalNovaNota();
   if(a==='planilha')baixarPlanilha();
   if(a==='salvarwhats'){t.disabled=true;try{await rpc('salvar_whatsapp',{p_phone_id:val('w_pid'),p_token:$('w_tok').value,p_destinos:[1,2,3,4].map(i=>val('w_d'+i)).filter(Boolean)});$('w_tok').value='';toast('Configuração salva.');await carregarWhats();}catch(err){toast(msgErro(err));}t.disabled=false;}
+  if(a==='ativarnum'){t.disabled=true;try{await rpc('ativar_numero',{p_pin:$('w_pin').value});$('w_pin').value='';toast('Pedido de ativação enviado. Veja o resultado em Últimos envios.');setTimeout(carregarWhats,4000);}catch(err){toast(msgErro(err));}t.disabled=false;}
   if(a==='testewhats'){t.disabled=true;try{await rpc('testar_whatsapp');toast('Teste enviado. Confira os celulares.');setTimeout(carregarWhats,4000);}catch(err){toast(msgErro(err));}t.disabled=false;}
 });
 $('app').addEventListener('input',e=>{if(e.target.id==='busca'){busca=e.target.value;render();}});
