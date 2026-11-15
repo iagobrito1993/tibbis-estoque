@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="pt-BR" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google" content="notranslate">
+<title>Tibbis Estoque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f5f4f0;--card:#fff;--ink:#1c1b19;--mut:#6b6862;--line:#e4e1d9;--pri:#1f4d3a;--pri2:#173b2c;--red:#b91c1c;--amb:#b45309}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4}
+.wrap{max-width:1040px;margin:0 auto;padding:0 14px 80px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 14px;font-weight:500}
+button:hover{border-color:#cfcabf}
+button.primary{background:var(--pri);border-color:var(--pri);color:#fff}
+button.primary:hover{background:var(--pri2)}
+button.danger{color:var(--red);border-color:#f1c9c9}
+button.small{padding:6px 10px;font-size:13px}
+button.link{border:0;background:none;color:var(--pri);padding:0;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+input,select,textarea{font:inherit;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+textarea{min-height:56px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid #9cc3b0;border-color:transparent}
+.hidden{display:none!important}
+.topo{background:#fff;border-bottom:1px solid var(--line)}
+.topo .wrap{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;padding-bottom:12px}
+.marca{font-weight:700;font-size:18px;letter-spacing:-.01em}
+.marca small{display:block;font-weight:500;font-size:12px;color:var(--mut)}
+.quem{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);flex-wrap:wrap;justify-content:flex-end}
+.abas{display:flex;gap:6px;overflow-x:auto;padding:12px 0 4px;margin-bottom:6px}
+.abas button{white-space:nowrap;border-radius:99px;padding:7px 14px}
+.abas button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.barra{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.barra input{flex:1;min-width:180px}
+.resumo{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.kpi .n{font-size:20px;font-weight:700}
+.kpi .l{font-size:12px;color:var(--mut)}
+.lista{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+.card.click{cursor:pointer}.card.click:hover{border-color:#cfcabf}
+.card .t{font-weight:600}
+.meta{color:var(--mut);font-size:13px;margin-top:3px}
+.meta b{color:var(--ink);font-weight:600}
+.dir{text-align:right;white-space:nowrap}
+.dir .n{font-weight:700;font-size:16px}
+.badge{font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap;display:inline-block}
+.b-rota{color:#1d4ed8;background:#dbeafe}.b-rec{color:#15803d;background:#dcfce7}.b-can{color:#6b6862;background:#eceae4}
+.b-pap{color:#7c3aed;background:#ede9fe}
+.warn{color:var(--amb);font-weight:600;font-size:13px;margin-top:4px}
+.ok{color:#15803d;font-weight:600;font-size:13px;margin-top:4px}
+.vazio{text-align:center;color:var(--mut);padding:36px 10px;border:1px dashed var(--line);border-radius:12px;background:#fff}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{border-radius:99px;padding:6px 12px;font-size:13px}
+.chips button.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.ov{position:fixed;inset:0;background:rgba(20,20,18,.45);display:flex;align-items:flex-start;justify-content:center;padding:20px 10px;overflow:auto;z-index:10}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:620px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+.modal h2{margin:0 0 4px;font-size:18px}
+.modal .sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.campo{margin-bottom:12px}
+.campo label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}
+.duas{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tres{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media (max-width:560px){.tres{grid-template-columns:1fr 1fr}}
+.rodape{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+.tab{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.tab .lin{padding:9px 10px;border-bottom:1px solid var(--line);display:flex;gap:10px;justify-content:space-between;align-items:center}
+.tab .lin:last-child{border-bottom:0}
+.tab .lin input{width:96px;padding:6px 8px;text-align:right}
+.rolar{max-height:320px;overflow:auto}
+.item{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
+.enc{font-size:13px;color:var(--mut);margin-top:6px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.total{background:#f3f1ec;border-radius:10px;padding:10px 12px;font-size:14px;margin:8px 0}
+.erro{color:var(--red);font-size:14px;margin:8px 0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1c1b19;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:20;max-width:90%}
+.login{max-width:380px;margin:9vh auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px}
+.login h1{margin:0 0 4px;font-size:22px}
+.login .sub{color:var(--mut);font-size:14px;margin-bottom:18px}
+.login button.primary{width:100%;margin-top:4px}
+.alt{text-align:center;margin-top:14px;font-size:14px;color:var(--mut)}
+.passo{font-size:14px;margin:0 0 8px}
+</style>
+</head>
+<body>
+<div id="app"><div class="login"><h1>Tibbis Estoque</h1><div class="sub">Carregando…</div></div></div>
+<div id="ov" class="ov hidden"><div id="modal" class="modal"></div></div>
+<div id="toast" class="toast hidden"></div>
+<script>
+const SUPABASE_URL='https://dufwrtancqquwdsqbjms.supabase.co';
+const SUPABASE_KEY='sb_publishable_Yz7FsB9rbjQOlhI2cVfuFg_xwdAtaSH';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const PAPEIS={admin:'Administrador',cuiaba:'Cuiabá',sp:'São Paulo'};
+const DESTINOS=['Full Mercado Livre','Full Amazon (FBA)','Outro'];
+let sessao=null,perfil=null,aba=null,busca='',filtroRem='rota',D={produtos:[],remessas:[],entradas:[],perfis:[]},modoLogin='entrar',carregando=false;
+
+// ---------- utilidades ----------
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function hoje(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fd(s){if(!s)return '—';const p=String(s).slice(0,10).split('-');return `${p[2]}/${p[1]}/${p[0]}`;}
+function fts(s){return s?new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';}
+function brl(n,dec=2){return Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:dec});}
+function un(n){return Number(n||0).toLocaleString('pt-BR');}
+function num(v){const n=parseInt(String(v??'').replace(/\D/g,''),10);return isNaN(n)?0:n;}
+function dinheiro(v){let s=String(v??'').trim().replace(/[R$\s]/g,'');if(!s)return NaN;if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');return parseFloat(s);}
+function um(x){return Array.isArray(x)?x[0]||null:x||null;}
+function val(id){const e=$(id);return e?e.value.trim():'';}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.add('hidden'),3000);}
+function podeCusto(){return perfil&&['admin','cuiaba'].includes(perfil.papel);}
+function podeSP(){return perfil&&['admin','sp'].includes(perfil.papel);}
+function ehAdmin(){return perfil&&perfil.papel==='admin';}
+function nomeDe(uid){const p=D.perfis.find(x=>x.user_id===uid);return p?(p.nome||p.email):'';}
+function produto(id){return D.produtos.find(p=>p.id===id)||{nome:'(produto)',sku:''};}
+function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesperado.';
+  if(/Invalid login/i.test(m))return 'E-mail ou senha incorretos.';
+  if(/Email not confirmed/i.test(m))return 'Confirme seu e-mail antes de entrar (veja sua caixa de entrada).';
+  if(/already registered/i.test(m))return 'Este e-mail já tem conta. Use "Entrar".';
+  if(/Password should be/i.test(m))return 'A senha precisa ter pelo menos 6 caracteres.';
+  if(/rate limit/i.test(m))return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+  return m;}
+async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;return data;}
+
+// ---------- modal ----------
+function abrir(html){$('modal').innerHTML=html;$('ov').classList.remove('hidden');const f=$('modal').querySelector('input:not([type=hidden]),select,textarea');if(f&&window.innerWidth>700)setTimeout(()=>f.focus(),30);}
+function fechar(){$('ov').classList.add('hidden');$('modal').innerHTML='';}
+$('ov').addEventListener('mousedown',e=>{if(e.target.id==='ov')fechar();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('ov').classList.contains('hidden'))fechar();});
+async function rodar(btn,fn){const err=$('modal').querySelector('.erro');if(err)err.textContent='';btn.disabled=true;
+  try{await fn();}catch(e){console.error(e);if(err)err.textContent=msgErro(e);else toast(msgErro(e));btn.disabled=false;}}
+
+// ---------- autenticação ----------
+function telaLogin(msg){
+  const cad=modoLogin==='criar',rec=modoLogin==='esqueci';
+  $('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1>
+  <div class="sub">${cad?'Crie sua conta de acesso.':rec?'Vamos enviar um link para criar uma nova senha.':'Entre com seu e-mail e senha.'}</div>
+  <form id="fl">
+    ${cad?'<div class="campo"><label>Seu nome</label><input id="l_nome" autocomplete="name" required></div>':''}
+    <div class="campo"><label>E-mail</label><input id="l_email" type="email" autocomplete="email" required></div>
+    ${rec?'':`<div class="campo"><label>Senha</label><input id="l_senha" type="password" autocomplete="${cad?'new-password':'current-password'}" required minlength="6"></div>`}
+    <div class="erro" id="l_erro">${esc(msg||'')}</div>
+    <button class="primary" id="l_ok">${cad?'Criar conta':rec?'Enviar link':'Entrar'}</button>
+  </form>
+  <div class="alt">${cad||rec?'<button class="link" data-m="entrar">Voltar para entrar</button>':'<button class="link" data-m="criar">Criar conta</button> · <button class="link" data-m="esqueci">Esqueci a senha</button>'}</div></div>`;
+  $('app').querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{modoLogin=b.dataset.m;telaLogin();});
+  $('fl').onsubmit=async e=>{e.preventDefault();const b=$('l_ok');b.disabled=true;$('l_erro').textContent='';
+    const email=val('l_email');
+    try{
+      if(cad){const {data,error}=await sb.auth.signUp({email,password:$('l_senha').value,options:{data:{nome:val('l_nome')},emailRedirectTo:location.origin+location.pathname}});
+        if(error)throw error;
+        if(!data.session){modoLogin='entrar';telaLogin();$('l_erro').style.color='#15803d';$('l_erro').textContent='Conta criada! Confirme pelo link enviado ao seu e-mail e depois entre.';return;}}
+      else if(rec){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;
+        $('l_erro').style.color='#15803d';$('l_erro').textContent='Pronto! Veja seu e-mail e clique no link.';b.disabled=false;return;}
+      else{const {error}=await sb.auth.signInWithPassword({email,password:$('l_senha').value});if(error)throw error;}
+    }catch(err){$('l_erro').style.color='';$('l_erro').textContent=msgErro(err);b.disabled=false;}
+  };
+}
+function telaPendente(){
+  $('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1><div class="sub">Olá, ${esc(perfil?.nome||sessao.user.email)}.</div>
+  <p class="passo">Sua conta foi criada e está aguardando liberação do administrador.</p>
+  <p class="passo" style="color:var(--mut)">Assim que o acesso for liberado, toque em "Verificar de novo".</p>
+  <button class="primary" id="pv" style="width:100%">Verificar de novo</button>
+  <div class="alt"><button class="link" id="ps">Sair</button></div></div>`;
+  $('pv').onclick=()=>carregarPerfil();$('ps').onclick=()=>sb.auth.signOut();
+}
+function modalNovaSenha(){
+  abrir(`<h2>Criar nova senha</h2><div class="sub">Digite a nova senha da sua conta.</div>
+  <div class="campo"><label>Nova senha</label><input id="ns" type="password" minlength="6" autocomplete="new-password"></div>
+  <div class="erro"></div><div class="rodape"><button class="primary" id="ok">Salvar senha</button></div>`);
+  $('ok').onclick=()=>rodar($('ok'),async()=>{const {error}=await sb.auth.updateUser({password:$('ns').value});if(error)throw error;fechar();toast('Senha alterada.');});
+}
+sb.auth.onAuthStateChange((ev,s)=>{
+  if(ev==='PASSWORD_RECOVERY'){sessao=s;setTimeout(modalNovaSenha,300);}
+  if(ev==='SIGNED_IN'&&(!sessao||sessao.user.id!==s.user.id)){sessao=s;setTimeout(carregarPerfil,0);}
+  if(ev==='SIGNED_OUT'){sessao=null;perfil=null;aba=null;modoLogin='entrar';setTimeout(()=>telaLogin(),0);}
+  if(s)sessao=s;
+});
+async function iniciar(){
+  const {data:{session}}=await sb.auth.getSession();sessao=session;
+  if(!sessao)return telaLogin();
+  await carregarPerfil();
+}
+async function carregarPerfil(){
+  const {data,error}=await sb.from('perfis').select('*').eq('user_id',sessao.user.id).maybeSingle();
+  if(error){$('app').innerHTML=`<div class="login"><h1>Tibbis Estoque</h1><p class="erro">Não foi possível carregar seu acesso. Tente recarregar a página.</p></div>`;return;}
+  perfil=data;
+  if(!perfil||!perfil.papel)return telaPendente();
+  if(!aba)aba=perfil.papel==='sp'?'remessas':'cuiaba';
+  await carregar();
+}
+
+// ---------- dados ----------
+async function carregar(){
+  if(carregando)return;carregando=true;
+  try{
+    const sel='*, remessas_custo(frete,frete_unit), remessa_itens(id,produto_id,qtd_enviada,qtd_recebida, remessa_itens_custo(custo_medio_saida,frete_unit,custo_sp), encaminhamentos(id,qtd,destino,conta,envio,data,obs,criado_por,criado_em))';
+    const reqs=[sb.from('produtos').select('id,nome,sku,produtos_custo(qtd_cuiaba,custo_medio)').order('nome'),
+      sb.from('remessas').select(sel).order('id',{ascending:false}).limit(400),
+      sb.from('perfis').select('*').order('nome')];
+    if(podeCusto())reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(500));
+    const r=await Promise.all(reqs);
+    const e=r.find(x=>x.error);if(e)throw e.error;
+    D.produtos=r[0].data;D.remessas=r[1].data;D.perfis=r[2].data;D.entradas=r[3]?r[3].data:[];
+  }catch(e){console.error(e);toast('Não foi possível atualizar os dados.');}
+  carregando=false;render();
+}
+setInterval(()=>{if(perfil&&perfil.papel&&$('ov').classList.contains('hidden')&&document.visibilityState==='visible')carregar();},60000);
+
+function itensRem(r){return (r.remessa_itens||[]).map(i=>{const enc=(i.encaminhamentos||[]).reduce((s,e)=>s+e.qtd,0);
+  return {...i,custo:um(i.remessa_itens_custo),enc,disp:r.status==='recebida'?(i.qtd_recebida||0)-enc:0};});}
+
+// ---------- tela principal ----------
+function abasDoPapel(){
+  const a=[];
+  if(podeCusto())a.push(['cuiaba','Estoque Cuiabá']);
+  a.push(['remessas','Remessas']);a.push(['sp','Estoque SP']);
+  if(podeCusto())a.push(['entradas','Entradas']);
+  if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['whatsapp','WhatsApp']);}
+  return a;
+}
+function render(){
+  if(!perfil||!perfil.papel)return;
+  const abas=abasDoPapel();if(!abas.find(x=>x[0]===aba))aba=abas[0][0];
+  const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,usuarios:abaUsuarios,whatsapp:abaWhats}[aba]();
+  const ativo=document.activeElement&&document.activeElement.id==='busca';const pos=ativo?document.activeElement.selectionStart:0;
+  $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca">Tibbis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div>
+    <div class="quem"><span>${esc(perfil.nome||perfil.email)}</span><span class="badge b-pap">${PAPEIS[perfil.papel]}</span>
+    <button class="small" data-act="atualizar">Atualizar</button><button class="small" data-act="sair">Sair</button></div></div></div>
+    <div class="wrap"><nav class="abas">${abas.map(([k,l])=>`<button class="${aba===k?'on':''}" data-aba="${k}">${l}</button>`).join('')}</nav>${conteudo}</div>`;
+  if(ativo){const b=$('busca');if(b){b.focus();b.setSelectionRange(pos,pos);}}
+}
+function barraBusca(ph,botoes=''){return `<div class="barra"><input id="busca" type="search" placeholder="${ph}" value="${esc(busca)}">${botoes}</div>`;}
+function bate(...c){const q=busca.trim().toLowerCase();return !q||c.join(' ').toLowerCase().includes(q);}
+
+function abaCuiaba(){
+  const lst=D.produtos.map(p=>({...p,c:um(p.produtos_custo)})).filter(p=>p.c&&bate(p.nome,p.sku))
+    .sort((a,b)=>(b.c.qtd_cuiaba>0)-(a.c.qtd_cuiaba>0)||a.nome.localeCompare(b.nome));
+  const comEst=lst.filter(p=>p.c.qtd_cuiaba>0);
+  const tu=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba,0),tv=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba*p.c.custo_medio,0);
+  return barraBusca('Buscar produto ou SKU…','<button class="primary" data-act="entrada">+ Entrada</button><button class="primary" data-act="remessa">+ Nova remessa</button>')+
+  `<div class="resumo"><div class="kpi"><div class="n">${un(comEst.length)}</div><div class="l">Produtos em estoque</div></div>
+   <div class="kpi"><div class="n">${un(tu)}</div><div class="l">Unidades em Cuiabá</div></div>
+   <div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div></div>
+  <div class="lista">${lst.length?lst.map(p=>`<div class="card" style="${p.c.qtd_cuiaba>0?'':'opacity:.55'}"><div><div class="t">${esc(p.nome)}</div>
+    <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku)+' · ':''}Custo médio <b>${brl(p.c.custo_medio,4)}</b></div></div>
+    <div class="dir"><div class="n">${un(p.c.qtd_cuiaba)} un.</div><div class="meta">${brl(p.c.qtd_cuiaba*p.c.custo_medio)}</div></div></div>`).join('')
+    :`<div class="vazio">${D.produtos.length?'Nada encontrado.':'Nenhum produto ainda. Toque em <b>+ Entrada</b> quando a mercadoria chegar na Tibbis.'}</div>`}</div>`;
+}
+
+function abaRemessas(){
+  const f={rota:r=>r.status==='em_rota',rec:r=>r.status==='recebida',todas:()=>true}[filtroRem];
+  const lst=D.remessas.filter(f).filter(r=>bate('#'+r.id,r.cte,...itensRem(r).map(i=>produto(i.produto_id).nome+' '+(produto(i.produto_id).sku||''))));
+  const cont={rota:D.remessas.filter(r=>r.status==='em_rota').length,rec:D.remessas.filter(r=>r.status==='recebida').length};
+  return barraBusca('Buscar remessa, CT-e ou produto…',podeCusto()?'<button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
+  `<div class="chips" style="margin-bottom:10px">${[['rota','Em rota ('+cont.rota+')'],['rec','Recebidas ('+cont.rec+')'],['todas','Todas']].map(([k,l])=>`<button class="${filtroRem===k?'on':''}" data-fr="${k}">${l}</button>`).join('')}</div>
+  <div class="lista">${lst.length?lst.map(cardRemessa).join(''):`<div class="vazio">Nenhuma remessa ${filtroRem==='rota'?'em rota':filtroRem==='rec'?'recebida':''}.</div>`}</div>`;
+}
+function badgeRem(s){return s==='em_rota'?'<span class="badge b-rota">Em rota p/ SP</span>':s==='recebida'?'<span class="badge b-rec">Chegou em SP</span>':'<span class="badge b-can">Cancelada</span>';}
+function cardRemessa(r){
+  const it=itensRem(r),env=it.reduce((s,i)=>s+i.qtd_enviada,0),rec=it.reduce((s,i)=>s+(i.qtd_recebida||0),0),disp=it.reduce((s,i)=>s+i.disp,0);
+  const c=um(r.remessas_custo);
+  let extra='';
+  if(r.status==='recebida'){extra+=`<div class="meta">Chegou ${fd(r.data_chegada)} · recebido <b>${un(rec)}</b> de ${un(env)}</div>`;
+    if(rec!==env)extra+=`<div class="warn">⚠ Divergência de ${un(env-rec)} un.</div>`;
+    extra+=disp>0?`<div class="ok">${un(disp)} un. no depósito aguardando encaminhamento</div>`:`<div class="meta">Tudo encaminhado</div>`;}
+  if(c&&podeCusto())extra+=`<div class="meta">Frete ${brl(c.frete)} · ${brl(c.frete_unit,4)} por unidade</div>`;
+  return `<div class="card click" data-rem="${r.id}"><div><div class="t">Remessa #${r.id} ${badgeRem(r.status)}</div>
+    <div class="meta">Saída ${fd(r.data_saida)}${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' vol.':''} · ${it.length} produto(s)</div>${extra}</div>
+    <div class="dir"><div class="n">${un(env)} un.</div><button class="small">Abrir</button></div></div>`;
+}
+
+function abaSP(){
+  const m={};
+  D.remessas.forEach(r=>itensRem(r).forEach(i=>{
+    const k=i.produto_id;m[k]=m[k]||{pid:k,dep:0,cam:0,custoTot:0};
+    if(r.status==='em_rota')m[k].cam+=i.qtd_enviada;
+    if(r.status==='recebida'&&i.disp>0){m[k].dep+=i.disp;if(i.custo)m[k].custoTot+=i.disp*i.custo.custo_sp;}
+  }));
+  const lst=Object.values(m).filter(x=>x.dep>0||x.cam>0).map(x=>({...x,p:produto(x.pid)})).filter(x=>bate(x.p.nome,x.p.sku)).sort((a,b)=>a.p.nome.localeCompare(b.p.nome));
+  const td=lst.reduce((s,x)=>s+x.dep,0),tc=lst.reduce((s,x)=>s+x.cam,0),tv=lst.reduce((s,x)=>s+x.custoTot,0);
+  return barraBusca('Buscar produto ou SKU…')+`<div class="resumo"><div class="kpi"><div class="n">${un(td)}</div><div class="l">Unidades no depósito SP</div></div>
+   <div class="kpi"><div class="n">${un(tc)}</div><div class="l">Unidades a caminho</div></div>
+   ${podeCusto()?`<div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor no depósito (custo SP)</div></div>`:''}</div>
+  <div class="lista">${lst.length?lst.map(x=>`<div class="card"><div><div class="t">${esc(x.p.nome)}</div>
+    <div class="meta">${x.p.sku?'SKU/EAN '+esc(x.p.sku):''}${x.cam?(x.p.sku?' · ':'')+'<b>'+un(x.cam)+'</b> un. a caminho':''}${podeCusto()&&x.dep?' · Custo SP médio <b>'+brl(x.custoTot/x.dep,4)+'</b>':''}</div></div>
+    <div class="dir"><div class="n">${un(x.dep)} un.</div><div class="meta">no depósito</div></div></div>`).join('')
+    :'<div class="vazio">Nenhuma mercadoria em SP ou a caminho.</div>'}</div>`;
+}
+
+function abaEntradas(){
+  const lst=D.entradas.filter(e=>bate(produto(e.produto_id).nome,produto(e.produto_id).sku,e.nf));
+  return barraBusca('Buscar produto, SKU ou NF…','<button class="primary" data-act="entrada">+ Entrada</button>')+
+  `<div class="lista">${lst.length?lst.map(e=>{const p=produto(e.produto_id);return `<div class="card"><div><div class="t">${esc(p.nome)}</div>
+    <div class="meta">${fd(e.data)}${e.nf?' · NF '+esc(e.nf):''} · Custo unit. <b>${brl(e.custo_unit,4)}</b> · Custo médio ${brl(e.custo_medio_antes,4)} → <b>${brl(e.custo_medio_depois,4)}</b></div>
+    <div class="meta">${nomeDe(e.criado_por)?'Lançado por '+esc(nomeDe(e.criado_por))+' · ':''}${fts(e.criado_em)}${e.obs?' · '+esc(e.obs):''}</div></div>
+    <div class="dir"><div class="n">+${un(e.qtd)} un.</div><div class="meta">${brl(e.qtd*e.custo_unit)}</div></div></div>`;}).join(''):'<div class="vazio">Nenhuma entrada registrada.</div>'}</div>`;
+}
+
+function abaUsuarios(){
+  return `<div class="total" style="margin-top:10px">Para dar acesso a alguém: peça para a pessoa abrir este site, tocar em <b>Criar conta</b> e confirmar o e-mail. Depois ela aparece aqui e você escolhe o acesso.</div>
+  <div class="lista">${D.perfis.map(p=>`<div class="card"><div><div class="t">${esc(p.nome||'')}</div><div class="meta">${esc(p.email||'')}</div>
+    ${p.papel?'':'<div class="warn">Aguardando liberação</div>'}</div>
+    <div><select data-papel="${p.user_id}" style="min-width:150px">
+      <option value="">Sem acesso</option>${Object.entries(PAPEIS).map(([k,l])=>`<option value="${k}" ${p.papel===k?'selected':''}>${l}</option>`).join('')}
+    </select></div></div>`).join('')}</div>
+  <div class="meta" style="margin-top:10px"><b>Administrador:</b> vê e faz tudo. <b>Cuiabá:</b> entradas, custo médio e remessas. <b>São Paulo:</b> vê as remessas e as quantidades, confirma a chegada e encaminha. Não vê custo, frete nem NF.</div>`;
+}
+
+function abaWhats(){
+  setTimeout(async()=>{try{const w=await rpc('ler_whatsapp');const s=$('w_status');if(s)s.innerHTML=w&&w.configurado?`<span class="ok">Ativo no número ${esc(w.fone)}</span>`:'<span class="warn">Ainda não configurado</span>';if(w&&w.fone&&$('w_fone')&&!$('w_fone').value)$('w_fone').value=w.fone;}catch(e){}},0);
+  return `<div class="item" style="background:#fff;margin-top:10px"><div class="t" style="font-weight:600;margin-bottom:6px">Avisos no WhatsApp</div>
+  <div class="meta" style="margin-bottom:10px">Você recebe uma mensagem quando: entra mercadoria na Tibbis, sai uma remessa, a remessa chega em SP (com aviso de divergência) e quando SP encaminha mercadoria.</div>
+  <div id="w_status" class="meta">Verificando…</div>
+  <div class="duas" style="margin-top:10px"><div class="campo"><label>Seu WhatsApp (com 55 e DDD)</label><input id="w_fone" inputmode="numeric" placeholder="5511999999999"></div>
+  <div class="campo"><label>Chave (apikey)</label><input id="w_key" placeholder="deixe vazio para manter a atual"></div></div>
+  <div class="rodape"><button class="primary" data-act="salvarwhats">Salvar e enviar teste</button></div></div>`;
+}
+
+// ---------- ações / modais ----------
+function modalEntrada(){
+  const opts=D.produtos.map(p=>`<option value="${esc(p.nome+(p.sku?' · '+p.sku:''))}">`).join('');
+  abrir(`<h2>Entrada na Tibbis Atacado</h2><div class="sub">Mercadoria que chegou em Cuiabá. O custo médio é recalculado automaticamente.</div>
+  <div class="campo"><label>Produto</label><input id="e_prod" list="dl_prod" placeholder="Busque um produto ou digite um novo"><datalist id="dl_prod">${opts}</datalist></div>
+  <div class="campo" id="c_sku"><label>SKU / EAN</label><input id="e_sku"></div>
+  <div class="tres"><div class="campo"><label>Quantidade</label><input id="e_qtd" inputmode="numeric"></div>
+  <div class="campo"><label>Custo unitário (R$)</label><input id="e_custo" inputmode="decimal" placeholder="0,00"></div>
+  <div class="campo"><label>Nota fiscal</label><input id="e_nf"></div></div>
+  <div class="duas"><div class="campo"><label>Data</label><input id="e_data" type="date" value="${hoje()}"></div>
+  <div class="campo"><label>Observação</label><input id="e_obs"></div></div>
+  <div class="total" id="e_prev">Preencha quantidade e custo para ver o novo custo médio.</div>
+  <div class="erro"></div>
+  <div class="rodape"><button id="cx">Cancelar</button><button id="mais">Salvar e lançar outro</button><button class="primary" id="ok">Salvar entrada</button></div>`);
+  const achar=()=>{const t=val('e_prod');return D.produtos.find(p=>(p.nome+(p.sku?' · '+p.sku:''))===t)||D.produtos.find(p=>p.nome.toLowerCase()===t.toLowerCase())||null;};
+  const prev=()=>{const p=achar();$('c_sku').classList.toggle('hidden',!!p);
+    const q=num(val('e_qtd')),c=dinheiro(val('e_custo'));const el=$('e_prev');
+    if(!q||isNaN(c)){el.textContent=p?'Produto existente: '+p.nome:'Preencha quantidade e custo para ver o novo custo médio.';return;}
+    const pc=p?um(p.produtos_custo):null,q0=pc?pc.qtd_cuiaba:0,c0=pc?pc.custo_medio:0;
+    const novo=q0>0?(q0*c0+q*c)/(q0+q):c;
+    el.innerHTML=`${p?'Estoque atual: '+un(q0)+' un. a '+brl(c0,4)+'<br>':'Produto novo<br>'}Entrando: ${un(q)} un. a ${brl(c,4)} = ${brl(q*c)}<br><b>Novo custo médio: ${brl(novo,4)}</b> · Estoque: ${un(q0+q)} un.`;};
+  ['e_prod','e_qtd','e_custo'].forEach(id=>$(id).addEventListener('input',prev));
+  $('cx').onclick=fechar;
+  const salvar=(cont,btn)=>{const p=achar(),q=num(val('e_qtd')),c=dinheiro(val('e_custo'));
+    if(!val('e_prod')){$('modal').querySelector('.erro').textContent='Informe o produto.';return;}
+    if(!q||isNaN(c)){$('modal').querySelector('.erro').textContent='Informe quantidade e custo unitário.';return;}
+    rodar(btn,async()=>{await rpc('registrar_entrada',{p_produto_id:p?p.id:null,p_nome:p?null:val('e_prod'),p_sku:p?null:val('e_sku'),p_qtd:q,p_custo:c,p_nf:val('e_nf'),p_data:val('e_data')||hoje(),p_obs:val('e_obs')});
+      toast('Entrada registrada.');await carregar();
+      if(cont){modalEntrada();}else fechar();});};
+  $('ok').onclick=()=>salvar(false,$('ok'));$('mais').onclick=()=>salvar(true,$('mais'));
+}
+
+function modalRemessa(){
+  const ps=D.produtos.map(p=>({...p,c:um(p.produtos_custo)})).filter(p=>p.c&&p.c.qtd_cuiaba>0).sort((a,b)=>a.nome.localeCompare(b.nome));
+  if(!ps.length){toast('Não há estoque em Cuiabá para enviar.');return;}
+  abrir(`<h2>Nova remessa para SP (Carvalima)</h2><div class="sub">Escolha os produtos e quantidades que vão nesta remessa. O restante continua em Cuiabá.</div>
+  <div class="tres"><div class="campo"><label>Data de saída</label><input id="r_data" type="date" value="${hoje()}"></div>
+  <div class="campo"><label>CT-e / coleta</label><input id="r_cte"></div>
+  <div class="campo"><label>Volumes</label><input id="r_vol" inputmode="numeric"></div></div>
+  <div class="duas"><div class="campo"><label>Frete Carvalima (R$)</label><input id="r_frete" inputmode="decimal" placeholder="0,00"></div>
+  <div class="campo"><label>Buscar produto</label><input id="r_busca" type="search"></div></div>
+  <div class="tab rolar">${ps.map(p=>`<div class="lin" data-lin="${p.id}" data-nome="${esc((p.nome+' '+(p.sku||'')).toLowerCase())}"><div><div>${esc(p.nome)}</div>
+    <div class="meta">Disponível ${un(p.c.qtd_cuiaba)} · custo ${brl(p.c.custo_medio,4)} <span data-csp="${p.id}"></span></div></div>
+    <input data-q="${p.id}" data-max="${p.c.qtd_cuiaba}" data-c="${p.c.custo_medio}" inputmode="numeric" placeholder="0"></div>`).join('')}</div>
+  <div class="total" id="r_tot">Nenhum produto selecionado.</div>
+  <div class="campo"><label>Observação</label><input id="r_obs"></div>
+  <div class="erro"></div>
+  <div class="rodape"><button id="cx">Cancelar</button><button class="primary" id="ok">Criar remessa</button></div>`);
+  const calc=()=>{const its=[...$('modal').querySelectorAll('[data-q]')].map(i=>({pid:+i.dataset.q,q:num(i.value),max:+i.dataset.max,c:+i.dataset.c})).filter(x=>x.q>0);
+    const tot=its.reduce((s,x)=>s+x.q,0),fr=dinheiro(val('r_frete'))||0,fu=tot?fr/tot:0;
+    $('modal').querySelectorAll('[data-csp]').forEach(s=>{const x=its.find(y=>y.pid===+s.dataset.csp);s.innerHTML=x?`→ <b>custo SP ${brl(x.c+fu,4)}</b>`:'';});
+    const exc=its.filter(x=>x.q>x.max);
+    $('r_tot').innerHTML=tot?`<b>${un(tot)} unidades</b> em ${its.length} produto(s) · Frete ${brl(fr)} ÷ ${un(tot)} = <b>${brl(fu,4)} por unidade</b>${exc.length?'<div class="warn">Quantidade acima do disponível em '+exc.length+' produto(s).</div>':''}`:'Nenhum produto selecionado.';
+    return {its,exc};};
+  $('modal').addEventListener('input',e=>{if(e.target.id==='r_busca'){const q=e.target.value.toLowerCase();$('modal').querySelectorAll('[data-lin]').forEach(l=>l.classList.toggle('hidden',!!q&&!l.dataset.nome.includes(q)));}else calc();});
+  $('cx').onclick=fechar;
+  $('ok').onclick=()=>{const {its,exc}=calc();const er=$('modal').querySelector('.erro');
+    if(!its.length){er.textContent='Informe a quantidade de pelo menos um produto.';return;}
+    if(exc.length){er.textContent='Há quantidades acima do disponível em Cuiabá.';return;}
+    const fr=val('r_frete')?dinheiro(val('r_frete')):0;if(isNaN(fr)){er.textContent='Valor do frete inválido.';return;}
+    rodar($('ok'),async()=>{const id=await rpc('criar_remessa',{p_data:val('r_data')||hoje(),p_cte:val('r_cte'),p_volumes:val('r_vol')?num(val('r_vol')):null,p_frete:fr,p_obs:val('r_obs'),p_itens:its.map(x=>({produto_id:x.pid,qtd:x.q}))});
+      toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();fechar();});};
+}
+
+function modalDetalhe(id){
+  const r=D.remessas.find(x=>x.id===id);if(!r)return;
+  const it=itensRem(r),c=um(r.remessas_custo);
+  const linhas=it.map(i=>{const p=produto(i.produto_id);
+    const custo=i.custo&&podeCusto()?`<div class="meta">Custo Cuiabá ${brl(i.custo.custo_medio_saida,4)} + frete ${brl(i.custo.frete_unit,4)} = <b>custo SP ${brl(i.custo.custo_sp,4)}</b></div>`:'';
+    const encs=(i.encaminhamentos||[]).slice().sort((a,b)=>a.id-b.id).map(e=>`<div class="enc"><span>→ <b>${un(e.qtd)}</b> un. ${esc(e.destino)}${e.conta?' ('+esc(e.conta)+')':''}${e.envio?' · envio '+esc(e.envio):''} · ${fd(e.data)}${nomeDe(e.criado_por)?' · '+esc(nomeDe(e.criado_por)):''}${e.obs?' · '+esc(e.obs):''}</span>${podeSP()?`<button class="small" data-desf="${e.id}" data-r="${r.id}">Desfazer</button>`:''}</div>`).join('');
+    return `<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(p.nome)}</b>${p.sku?' <span class="meta">'+esc(p.sku)+'</span>':''}
+      <div class="meta">Enviado <b>${un(i.qtd_enviada)}</b>${r.status==='recebida'?` · Recebido <b>${un(i.qtd_recebida)}</b> · Encaminhado ${un(i.enc)} · <b>No depósito ${un(i.disp)}</b>`:''}</div>
+      ${r.status==='recebida'&&i.qtd_recebida!==i.qtd_enviada?`<div class="warn">⚠ Divergência: ${un(i.qtd_enviada-i.qtd_recebida)} un.</div>`:''}${custo}</div>
+      ${r.status==='recebida'&&i.disp>0&&podeSP()?`<button class="small primary" data-encam="${i.id}" data-r="${r.id}">Encaminhar</button>`:''}</div>${encs}</div>`;}).join('');
+  const env=it.reduce((s,i)=>s+i.qtd_enviada,0);
+  abrir(`<h2>Remessa #${r.id} ${badgeRem(r.status)}</h2>
+  <div class="sub">Saída ${fd(r.data_saida)} pela Carvalima${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' volume(s)':''} · ${un(env)} un.${nomeDe(r.criado_por)?' · por '+esc(nomeDe(r.criado_por)):''}
+  ${r.status==='recebida'?`<br>Chegou em SP ${fd(r.data_chegada)}${nomeDe(r.recebido_por)?' · confirmado por '+esc(nomeDe(r.recebido_por)):''}${r.obs_chegada?' · '+esc(r.obs_chegada):''}`:''}
+  ${r.obs?'<br>Obs.: '+esc(r.obs):''}</div>
+  ${c&&podeCusto()?`<div class="total">Frete Carvalima <b>${brl(c.frete)}</b> ÷ ${un(env)} un. = <b>${brl(c.frete_unit,4)} por unidade</b></div>`:''}
+  ${linhas}<div class="erro"></div>
+  <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}
+  ${r.status==='em_rota'&&podeSP()?`<button class="primary" id="cheg">Confirmar chegada</button>`:''}<button id="cx">Fechar</button></div>`);
+  $('cx').onclick=fechar;
+  if($('cheg'))$('cheg').onclick=()=>modalChegada(r.id);
+  if($('canc'))$('canc').onclick=()=>confirmar('Cancelar a remessa #'+r.id+'?','As quantidades voltam para o estoque de Cuiabá.','Cancelar remessa',async()=>{await rpc('cancelar_remessa',{p_remessa:r.id});toast('Remessa cancelada.');await carregar();});
+  $('modal').querySelectorAll('[data-encam]').forEach(b=>b.onclick=()=>modalEncaminhar(+b.dataset.r,+b.dataset.encam));
+  $('modal').querySelectorAll('[data-desf]').forEach(b=>b.onclick=()=>rodar(b,async()=>{await rpc('desfazer_encaminhamento',{p_id:+b.dataset.desf});toast('Encaminhamento desfeito.');await carregar();modalDetalhe(+b.dataset.r);}));
+}
+
+function modalChegada(rid){
+  const r=D.remessas.find(x=>x.id===rid),it=itensRem(r);
+  abrir(`<h2>Confirmar chegada — Remessa #${r.id}</h2><div class="sub">Confira quanto chegou de cada produto no depósito de SP. Se chegou tudo, é só confirmar.</div>
+  <div class="tab">${it.map(i=>`<div class="lin"><div>${esc(produto(i.produto_id).nome)}<div class="meta">Enviado ${un(i.qtd_enviada)}</div></div>
+    <input data-rec="${i.id}" inputmode="numeric" value="${i.qtd_enviada}"></div>`).join('')}</div>
+  <div class="duas"><div class="campo"><label>Data de chegada</label><input id="c_data" type="date" value="${hoje()}"></div>
+  <div class="campo"><label>Observação (avarias, faltas…)</label><input id="c_obs"></div></div>
+  <div class="erro"></div><div class="rodape"><button id="cx">Voltar</button><button class="primary" id="ok">Confirmar chegada</button></div>`);
+  $('cx').onclick=()=>modalDetalhe(rid);
+  $('ok').onclick=()=>rodar($('ok'),async()=>{
+    const itens=[...$('modal').querySelectorAll('[data-rec]')].map(i=>({item_id:+i.dataset.rec,qtd:num(i.value)}));
+    await rpc('confirmar_chegada',{p_remessa:rid,p_data:val('c_data')||hoje(),p_itens:itens,p_obs:val('c_obs')});
+    toast('Chegada confirmada.');await carregar();modalDetalhe(rid);});
+}
+
+function modalEncaminhar(rid,iid){
+  const r=D.remessas.find(x=>x.id===rid),i=itensRem(r).find(x=>x.id===iid),p=produto(i.produto_id);
+  abrir(`<h2>Encaminhar mercadoria</h2><div class="sub">${esc(p.nome)} — ${un(i.disp)} un. no depósito SP (remessa #${rid}).</div>
+  <div class="campo"><label>Para onde foi?</label><select id="n_dest">${DESTINOS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+  <div class="campo hidden" id="c_outro"><label>Qual destino?</label><input id="n_outro"></div>
+  <div class="duas"><div class="campo"><label>Quantidade</label><input id="n_qtd" inputmode="numeric" value="${i.disp}"></div>
+  <div class="campo"><label>Conta / loja</label><input id="n_conta" placeholder="ex.: Nexxcompany"></div></div>
+  <div class="duas"><div class="campo"><label>Nº do envio / agendamento</label><input id="n_envio"></div>
+  <div class="campo"><label>Data</label><input id="n_data" type="date" value="${hoje()}"></div></div>
+  <div class="campo"><label>Observação</label><input id="n_obs"></div>
+  <div class="meta">Se encaminhar só uma parte, o restante continua no depósito.</div>
+  <div class="erro"></div><div class="rodape"><button id="cx">Voltar</button><button class="primary" id="ok">Confirmar</button></div>`);
+  $('n_dest').onchange=()=>$('c_outro').classList.toggle('hidden',$('n_dest').value!=='Outro');
+  $('cx').onclick=()=>modalDetalhe(rid);
+  $('ok').onclick=()=>{const dest=$('n_dest').value==='Outro'?val('n_outro'):$('n_dest').value;const q=num(val('n_qtd'));const er=$('modal').querySelector('.erro');
+    if(!dest){er.textContent='Informe o destino.';return;}if(!q||q>i.disp){er.textContent='A quantidade deve ser entre 1 e '+i.disp+'.';return;}
+    rodar($('ok'),async()=>{await rpc('encaminhar',{p_item:iid,p_qtd:q,p_destino:dest,p_conta:val('n_conta'),p_envio:val('n_envio'),p_data:val('n_data')||hoje(),p_obs:val('n_obs')});
+      toast('Encaminhamento registrado.');await carregar();modalDetalhe(rid);});};
+}
+
+function confirmar(t,txt,btn,fn){
+  abrir(`<h2>${esc(t)}</h2><div class="sub">${esc(txt)}</div><div class="erro"></div><div class="rodape"><button id="cx">Voltar</button><button class="primary" id="ok">${esc(btn)}</button></div>`);
+  $('cx').onclick=fechar;$('ok').onclick=()=>rodar($('ok'),async()=>{await fn();fechar();});
+}
+
+// ---------- eventos ----------
+$('app').addEventListener('click',async e=>{
+  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem]');if(!t)return;
+  if(t.dataset.aba){aba=t.dataset.aba;busca='';render();return;}
+  if(t.dataset.fr){filtroRem=t.dataset.fr;render();return;}
+  if(t.dataset.rem){modalDetalhe(+t.dataset.rem);return;}
+  const a=t.dataset.act;
+  if(a==='sair')sb.auth.signOut();
+  if(a==='atualizar'){await carregar();toast('Atualizado.');}
+  if(a==='entrada')modalEntrada();
+  if(a==='remessa')modalRemessa();
+  if(a==='salvarwhats'){t.disabled=true;try{await rpc('salvar_whatsapp',{p_fone:val('w_fone'),p_apikey:val('w_key')});toast('Salvo. Uma mensagem de teste foi enviada.');render();}catch(err){toast(msgErro(err));t.disabled=false;}}
+});
+$('app').addEventListener('input',e=>{if(e.target.id==='busca'){busca=e.target.value;render();}});
+$('app').addEventListener('change',async e=>{const s=e.target.closest('[data-papel]');if(!s)return;
+  try{await rpc('definir_papel',{p_user:s.dataset.papel,p_papel:s.value||null});toast('Acesso atualizado.');await carregar();}
+  catch(err){toast(msgErro(err));await carregar();}});
+
+iniciar();
+</script>
+</body>
+</html>
