@@ -411,15 +411,16 @@ function abaNotas(){
    <div class="kpi"><div class="n">${brl(soma(prox))}</div><div class="l">Vence em 30 dias</div></div>
    <div class="kpi"><div class="n" style="color:${venc.length?'var(--red)':'inherit'}">${brl(soma(venc))}</div><div class="l">Vencidos</div></div></div>
   <h3>Conferência das notas</h3>
-  ${notas.length?`<div class="scroll"><table class="planilha"><tr><th>Emissão</th><th>NF</th><th>Fornecedor</th><th class="n">Total nota</th><th class="n">Boletos</th><th class="n">Produtos lançados</th><th>Conferência</th><th></th></tr>
+  ${notas.length?`<div class="scroll"><table class="planilha"><tr><th>Emissão</th><th>NF</th><th>Fornecedor</th><th class="n">Total nota</th><th class="n">Boletos</th><th class="n">Produtos lançados</th><th>Conferência</th><th>PDFs</th><th></th></tr>
   ${notas.map(n=>{const c=conferencia(n);return `<tr><td>${fd(n.emissao)}</td><td>${esc(n.numero)}</td><td>${esc(n.fornecedor)}</td><td class="n">${brl(n.valor_total)}</td>
     <td class="n">${brl(c.sb)} <small>(${c.bs.length}x)</small></td><td class="n">${brl(c.se)} <small>(${c.es.length} itens)</small></td>
     <td>${c.okB&&c.okE?'<span class="ok">✓ Confere</span>':'<span class="warn">⚠ '+(!c.okB?'Boletos ≠ nota ':'')+(!c.okE?'Produtos ≠ nota':'')+'</span>'}</td>
+    <td>${anexosDe(n.id).length?`<button class="small" data-nota="${n.id}">📄 ${anexosDe(n.id).length}</button>`:''}${podeCusto()?` <button class="small" data-anxnota="${n.id}">📎 Anexar PDF</button>`:''}</td>
     <td><button class="small" data-nota="${n.id}">Abrir</button></td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhuma nota cadastrada.</div>'}
   <h3>Boletos</h3>
   ${bols.length?`<div class="scroll"><table class="planilha"><tr><th>Vencimento</th><th>Fornecedor</th><th>NF</th><th>Parcela</th><th class="n">Valor</th><th>Situação</th><th>Boleto</th><th></th></tr>
   ${bols.map(b=>{const n=nota(b.nota_id),v=!b.pago&&b.vencimento<hoje_;return `<tr class="${b.pago?'pago':v?'venc':''}"><td>${fd(b.vencimento)}</td><td>${esc(n.fornecedor||'')}</td><td>${esc(n.numero||'')}</td><td>${esc(b.parcela||'')}</td><td class="n">${brl(b.valor)}</td>
-    <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td>${(D.anexosNota||[]).filter(a=>a.boleto_id===b.id).map(a=>`<button class="small" data-arqn="${a.id}">📄 Ver</button>`).join(' ')||`<button class="small" data-nota="${b.nota_id}">Abrir nota</button>`}</td><td>${podeCusto()?`<button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button>`:''}</td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
+    <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td>${(D.anexosNota||[]).filter(a=>a.boleto_id===b.id).map(a=>`<button class="small" data-arqn="${a.id}">📄 Ver</button>`).join(' ')}${podeCusto()&&!(D.anexosNota||[]).some(a=>a.boleto_id===b.id)?`<button class="small" data-anxbol="${b.id}" data-anxbn="${b.nota_id}">📎 Anexar PDF</button>`:''}</td><td>${podeCusto()?`<button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button>`:''}</td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
 }
 function addDias(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);}
 // ---------- entrada por nota fiscal (XML da NF-e) ----------
@@ -525,15 +526,14 @@ function telaConferirNF(){
   <div class="total" id="nf_bsum"></div>
   ${d.pagamentos.length?`<div class="meta">Forma de pagamento na nota: ${d.pagamentos.map(p=>esc(TIPOS_PAG[p.tipo]||('código '+p.tipo))+' '+brl(p.valor)).join(' · ')}${d.fatura?' · Fatura '+esc(d.fatura.numero||'')+' líquido '+brl(d.fatura.liquido):''}</div>`:''}
   <h3>Arquivos</h3>
-  <div class="duas"><div class="campo"><label>PDF da nota (DANFE) e outros</label><input id="nf_docs" type="file" multiple accept="application/pdf,image/*"></div>
-  <div class="campo"><label>Boletos (PDF)</label><input id="nf_bfiles" type="file" multiple accept="application/pdf,image/*"></div></div>
-  <div class="meta">O XML da nota é guardado automaticamente.</div>
+  <div class="campo"><label>PDF da nota (DANFE) e outros documentos</label><input id="nf_docs" type="file" multiple accept="application/pdf,image/*"></div>
+  <div class="meta">O XML da nota é guardado automaticamente. O PDF de cada boleto você anexa na parcela, acima.</div>
   <div class="campo" style="margin-top:10px"><label>Observação</label><input id="nf_obs" value="${esc(NF.obs)}"></div>
   ${d.info?`<details style="margin:6px 0"><summary class="meta" style="cursor:pointer">Informações complementares da nota</summary><div class="meta" style="white-space:pre-wrap">${esc(d.info)}</div></details>`:''}
   <div class="total" id="nf_res"></div>
   <div class="erro"></div><div class="rodape"><button id="cx">Cancelar</button><button id="nf_volta">Trocar XML</button><button class="primary" id="ok">Lançar entrada</button></div></div>`,true);
   NF.linhas.forEach((l,i)=>{$('modal').querySelector(`[data-nfp="${i}"]`).value=l.pid;});
-  const desenharBols=()=>{$('nf_bols').innerHTML=NF.bols.length?NF.bols.map((b,i)=>`<div class="tres" style="margin-bottom:6px;grid-template-columns:90px 1fr 1fr 40px"><input data-bp="${i}" value="${esc(b.parcela)}" placeholder="Parcela"><input type="date" data-bv="${i}" value="${esc(b.vencimento)}"><input inputmode="decimal" data-bval="${i}" value="${b.valor===''?'':Number(b.valor).toFixed(2).replace('.',',')}" placeholder="Valor"><button class="small" data-bdel="${i}" title="Remover">✕</button></div>`).join(''):'<div class="meta" style="margin-bottom:6px">A nota não traz boletos. Se houver parcelas, adicione aqui.</div>';};
+  const desenharBols=()=>{$('nf_bols').innerHTML=NF.bols.length?NF.bols.map((b,i)=>`<div class="tres" style="margin-bottom:6px;grid-template-columns:90px 1fr 1fr 1.3fr 40px;align-items:center"><input data-bp="${i}" value="${esc(b.parcela)}" placeholder="Parcela"><input type="date" data-bv="${i}" value="${esc(b.vencimento)}"><input inputmode="decimal" data-bval="${i}" value="${b.valor===''?'':Number(b.valor).toFixed(2).replace('.',',')}" placeholder="Valor">${b.arq?`<span class="meta" style="margin:0">📄 ${esc(b.arq.name)} <button class="link" data-barx="${i}">trocar</button></span>`:`<button class="small" data-barq="${i}">📎 PDF do boleto</button>`}<button class="small" data-bdel="${i}" title="Remover">✕</button></div>`).join(''):'<div class="meta" style="margin-bottom:6px">A nota não traz boletos. Se houver parcelas, adicione aqui.</div>';};
   const recalc=()=>{let tot=0,n=0,un_=0,prob=0;
     NF.linhas.forEach((l,i)=>{const r=custoLinhaNF(l),p=l.pid!=='novo'?D.produtos.find(x=>String(x.id)===l.pid):null,pc=p?um(p.produtos_custo):null;
       const q0=pc?pc.qtd_cuiaba:0,c0=pc?+pc.custo_medio:0,novo=q0>0?(q0*c0+r.qtd*r.custo)/(q0+r.qtd):r.custo;
@@ -559,7 +559,9 @@ function telaConferirNF(){
     if(t.dataset.bp!=null)NF.bols[+t.dataset.bp].parcela=t.value;
     if(t.dataset.bv!=null)NF.bols[+t.dataset.bv].vencimento=t.value;
     if(t.dataset.bval!=null){const v=dinheiro(t.value);NF.bols[+t.dataset.bval].valor=isNaN(v)?'':v;recalc();}});
-  $('nf_w').addEventListener('click',e=>{const t=e.target.closest('[data-bdel]');if(!t)return;NF.bols.splice(+t.dataset.bdel,1);desenharBols();recalc();});
+  $('nf_w').addEventListener('click',async e=>{const t=e.target.closest('[data-bdel],[data-barq],[data-barx]');if(!t)return;
+    if(t.dataset.bdel!=null){NF.bols.splice(+t.dataset.bdel,1);desenharBols();recalc();return;}
+    const i=+(t.dataset.barq??t.dataset.barx);const fs=await escolherArquivos(false);if(fs.length&&NF&&NF.bols[i]){NF.bols[i].arq=fs[0];desenharBols();}});
   $('nf_addb').onclick=()=>{NF.bols.push({parcela:(NF.bols.length+1)+'',vencimento:'',valor:''});desenharBols();recalc();};
   $('cx').onclick=()=>{NF=null;fechar();};$('nf_volta').onclick=modalEntradaNF;
   $('ok').onclick=()=>{const er=$('modal').querySelector('.erro');er.textContent='';
@@ -568,8 +570,8 @@ function telaConferirNF(){
     if(lin.some(l=>!custoLinhaNF(l).qtd)){er.textContent='Há item com quantidade zero. Confira "Un. por emb.".';return;}
     if(NF.bols.some(b=>!b.vencimento||b.valor===''||isNaN(+b.valor))){er.textContent='Preencha vencimento e valor de todas as parcelas (ou remova as vazias).';return;}
     if(NF.modo==='boletos'&&!NF.bols.length){er.textContent='Para o custo proporcional aos boletos, informe os boletos.';return;}
-    const docs=[...$('nf_docs').files],bfs=[...$('nf_bfiles').files];
-    if([...docs,...bfs].some(f=>f.size>20*1024*1024)){er.textContent='Algum arquivo passa de 20 MB.';return;}
+    const docs=[...$('nf_docs').files],bfs=NF.bols.map(b=>b.arq||null);
+    if([...docs,...bfs.filter(Boolean)].some(f=>f.size>20*1024*1024)){er.textContent='Algum arquivo passa de 20 MB.';return;}
     const nb=NF.bols.length,itens=NF.linhas.map(l=>{const r=custoLinhaNF(l),p=l.pid!=='novo'?produto(+l.pid):null;
       return {n:l.it.n,codigo:l.it.codigo,ean:l.it.ean,nome:l.it.nome,ncm:l.it.ncm,cfop:l.it.cfop,un:l.it.un,qtd:l.it.qtd,vun:l.it.vun,vprod:l.it.vprod,desc:l.it.desc,
         frete:l.it.frete,outro:+(l.it.seg+l.it.outro).toFixed(2),ipi:l.it.ipi,st:l.it.st,tot:l.it.tot,lote:l.it.lote,validade:l.it.validade,info:l.it.info,
@@ -584,7 +586,7 @@ function telaConferirNF(){
       const nid=await rpc('entrada_por_nota',{p:payload});
       const falhas=[];
       const env=async(f,tipo)=>{try{await enviarArqNota(nid,f,tipo);}catch(e){falhas.push(f.name);}};
-      await env(NF.arq,'xml');for(const f of docs)await env(f,'documento');for(const f of bfs)await env(f,'boleto');
+      await env(NF.arq,'xml');for(const f of docs)await env(f,'documento');falhas.push(...await anexarBoletosDaNota(nid,bfs));
       NF=null;await carregar();fechar();
       toast(falhas.length?'Entrada lançada, mas não foi possível anexar: '+falhas.join(', '):'Entrada da NF '+d.numero+' lançada.');
       aba='notas';render();modalNota(nid);});};
@@ -606,6 +608,15 @@ async function abrirArqNota(aid){const x=(D.anexosNota||[]).find(a=>a.id===aid);
   if(w)w.location.href=data.signedUrl;else location.href=data.signedUrl;
   log('abriu','Arquivo da nota: '+x.nome);
 }
+function escolherArquivos(multi){return new Promise(ok=>{const i=document.createElement('input');i.type='file';i.accept='application/pdf,image/*';if(multi)i.multiple=true;
+  i.style.display='none';document.body.appendChild(i);i.onchange=()=>{ok([...i.files]);i.remove();};i.click();});}
+async function anexarRapido(nid,tipo,bid,multi){const fs=await escolherArquivos(multi);if(!fs.length)return;
+  try{toast('Enviando '+(fs.length>1?fs.length+' arquivos':'arquivo')+'…');for(const f of fs)await enviarArqNota(nid,f,tipo,bid);toast(tipo==='boleto'?'Boleto anexado.':'Arquivo anexado.');await carregar();}
+  catch(e){toast(msgErro(e));}}
+async function anexarBoletosDaNota(nid,arqs){if(!arqs.some(Boolean))return [];const falhas=[];
+  const {data}=await sb.from('boletos').select('id').eq('nota_id',nid).order('id');
+  for(let i=0;i<arqs.length;i++){const f=arqs[i];if(!f)continue;try{await enviarArqNota(nid,f,'boleto',data&&data[i]?data[i].id:null);}catch(e){falhas.push(f.name);}}
+  return falhas;}
 const TIPOS_ARQ={xml:'XML da nota',documento:'Documento',boleto:'Boleto',comprovante:'Comprovante de pagamento'};
 
 function baseConf(n,sb_){return n.modo_custo==='item'?(+n.valor_produtos-(+n.desconto||0)):n.modo_custo==='boletos'?sb_:+n.valor_total;}
@@ -684,18 +695,25 @@ function modalNovaNota(){
   <div class="campo"><label>Desconto</label><input id="nn_ds" inputmode="decimal"></div>
   <div class="campo"><label>Valor total</label><input id="nn_vt" inputmode="decimal"></div></div>
   <label style="font-size:13px;font-weight:600">Boletos / parcelas</label>
+  <div class="meta" style="margin-bottom:6px">Vencimento, valor e o PDF do boleto de cada parcela.</div>
   <div id="nn_bols"></div><button class="small" id="nn_add" style="margin:6px 0 12px">+ Parcela</button>
+  <div class="campo"><label>PDF da nota (DANFE) e outros documentos</label><input id="nn_docs" type="file" multiple accept="application/pdf,image/*"></div>
   <div class="campo"><label>Observação</label><input id="nn_obs"></div>
   <div class="erro"></div><div class="rodape"><button id="cx">Cancelar</button><button class="primary" id="ok">Salvar</button></div>`);
-  const add=()=>{const d=document.createElement('div');d.className='duas';d.style.marginBottom='6px';d.innerHTML='<input type="date" data-bv><input inputmode="decimal" placeholder="Valor" data-bval>';$('nn_bols').appendChild(d);};
+  const add=()=>{const d=document.createElement('div');d.className='duas';d.style.marginBottom='6px';d.className='tres';d.innerHTML='<input type="date" data-bv><input inputmode="decimal" placeholder="Valor" data-bval><input type="file" accept="application/pdf,image/*" data-barq title="PDF do boleto">';$('nn_bols').appendChild(d);};
   add();$('nn_add').onclick=add;$('cx').onclick=fechar;
   $('ok').onclick=()=>{const er=$('modal').querySelector('.erro');const vt=dinheiro(val('nn_vt'));
     if(!val('nn_num')||!val('nn_forn')||isNaN(vt)){er.textContent='Preencha número, fornecedor e valor total.';return;}
     const vs=[...$('modal').querySelectorAll('[data-bv]')],vals=[...$('modal').querySelectorAll('[data-bval]')];
-    const bols=vs.map((v,i)=>({vencimento:v.value,valor:dinheiro(vals[i].value)})).filter(b=>b.vencimento&&!isNaN(b.valor)).map((b,i,a)=>({...b,parcela:(i+1)+'/'+a.length}));
-    rodar($('ok'),async()=>{await rpc('salvar_nota',{p:{numero:val('nn_num'),fornecedor:val('nn_forn'),cnpj:val('nn_cnpj'),emissao:val('nn_em'),
+    const arqsB=[...$('modal').querySelectorAll('[data-barq]')];
+    const lin=vs.map((v,i)=>({vencimento:v.value,valor:dinheiro(vals[i].value),arq:arqsB[i].files[0]||null})).filter(b=>b.vencimento&&!isNaN(b.valor));
+    const bols=lin.map((b,i,a)=>({vencimento:b.vencimento,valor:b.valor,parcela:(i+1)+'/'+a.length}));const docs=[...$('nn_docs').files];
+    if([...docs,...lin.map(b=>b.arq).filter(Boolean)].some(f=>f.size>20*1024*1024)){er.textContent='Algum arquivo passa de 20 MB.';return;}
+    rodar($('ok'),async()=>{const nid=await rpc('salvar_nota',{p:{numero:val('nn_num'),fornecedor:val('nn_forn'),cnpj:val('nn_cnpj'),emissao:val('nn_em'),
       valor_produtos:dinheiro(val('nn_vp'))||0,desconto:dinheiro(val('nn_ds'))||0,valor_total:vt,obs:val('nn_obs'),boletos:bols}});
-      toast('Nota cadastrada.');await carregar();fechar();});};
+      const falhas=[];for(const f of docs){try{await enviarArqNota(nid,f,'documento');}catch(e){falhas.push(f.name);}}
+      falhas.push(...await anexarBoletosDaNota(nid,lin.map(b=>b.arq)));
+      toast(falhas.length?'Nota cadastrada, mas não foi possível anexar: '+falhas.join(', '):'Nota cadastrada.');await carregar();fechar();if(nid)modalNota(nid);});};
 }
 function baixarPlanilha(){log('acao','Baixou planilha de notas e boletos');
   const q=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
@@ -1029,9 +1047,11 @@ function confirmar(t,txt,btn,fn){
 
 // ---------- eventos ----------
 $('app').addEventListener('click',async e=>{
-  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn]');if(!t)return;
+  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn],[data-anxnota],[data-anxbol]');if(!t)return;
   if(t.dataset.prod){modalProduto(+t.dataset.prod);return;}
   if(t.dataset.arqn){abrirArqNota(+t.dataset.arqn);return;}
+  if(t.dataset.anxnota){anexarRapido(+t.dataset.anxnota,'documento',null,true);return;}
+  if(t.dataset.anxbol){anexarRapido(+t.dataset.anxbn,'boleto',+t.dataset.anxbol,false);return;}
   if(t.dataset.nota){modalNota(+t.dataset.nota);return;}
   if(t.dataset.bol){t.disabled=true;try{await rpc('marcar_boleto',{p_id:+t.dataset.bol,p_pago:t.dataset.pg==='1'});await carregar();}catch(err){toast(msgErro(err));t.disabled=false;}return;}
   if(t.dataset.aba){aba=t.dataset.aba;busca='';log('aba',t.textContent.trim());render();return;}
