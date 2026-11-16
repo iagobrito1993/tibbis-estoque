@@ -632,7 +632,7 @@ function imprimirEtiquetas(lista,fmtK,rem){
 // ---------- etiquetas do Mercado Livre (anexos da remessa) ----------
 function etqHTML(r){const a=(r.remessa_anexos||[]).slice().sort((x,y)=>x.id-y.id);
   return `<div class="item"><b>🏷 Etiquetas do Mercado Livre</b>
-  ${a.length?a.map(x=>`<div class="enc"><span>📄 ${esc(x.nome)} · ${fts(x.criado_em)}${nomeDe(x.criado_por)?' · '+esc(nomeDe(x.criado_por)):''}</span><button class="small" data-anx="${x.id}">Abrir</button></div>`).join(''):'<div class="meta">Nenhuma etiqueta anexada ainda. Emita as etiquetas no Mercado Livre e anexe o arquivo aqui.</div>'}
+  ${a.length?a.map(x=>`<div class="enc"><span>📄 ${esc(x.nome)} · ${fts(x.criado_em)}${nomeDe(x.criado_por)?' · '+esc(nomeDe(x.criado_por)):''}</span><span><button class="small" data-anx="${x.id}">Abrir</button>${podeFoto()&&r.status!=='cancelada'?` <button class="small" data-anxdel="${x.id}">Remover</button>`:''}</span></div>`).join(''):'<div class="meta">Nenhuma etiqueta anexada ainda. Emita as etiquetas no Mercado Livre e anexe o arquivo aqui.</div>'}
   ${podeFoto()&&r.status!=='cancelada'?`<input type="file" id="anx_arq" accept="application/pdf,image/png,image/jpeg" multiple hidden><div style="margin-top:8px"><button class="small primary" id="anx_add">📎 Anexar etiqueta</button> <span class="meta">PDF ou imagem, até 20 MB</span></div>`:''}</div>`;}
 async function enviarAnexo(rid,f){
   if(f.size>20*1024*1024)throw new Error('O arquivo '+f.name+' passa de 20 MB.');
@@ -651,6 +651,12 @@ async function abrirAnexo(r,aid){const x=(r.remessa_anexos||[]).find(a=>a.id===a
   if(w)w.location.href=data.signedUrl;else location.href=data.signedUrl;
   log('abriu','Etiqueta da remessa #'+r.id+': '+x.nome);
 }
+function removerAnexo(r,aid){const x=(r.remessa_anexos||[]).find(a=>a.id===aid);if(!x)return;
+  confirmar('Remover a etiqueta?','O arquivo "'+x.nome+'" será apagado da remessa #'+r.id+'. Depois é só anexar de novo, se precisar.','Remover',async()=>{
+    const {data,error}=await sb.from('remessa_anexos').delete().eq('id',aid).select('id');
+    if(error)throw error;if(!data||!data.length)throw new Error('Você não tem permissão para remover esta etiqueta.');
+    sb.storage.from('etiquetas').remove([x.caminho]).then(()=>{},()=>{});
+    log('acao','Removeu etiqueta da remessa #'+r.id+': '+x.nome);toast('Etiqueta removida.');await carregar();setTimeout(()=>modalDetalhe(r.id),0);});}
 function modalEtiquetas(rid,nova){
   const r=D.remessas.find(x=>x.id===rid);if(!r)return;
   const it=itensRem(r).map(i=>({p:produto(i.produto_id),q:i.qtd_enviada}));
@@ -733,6 +739,7 @@ function modalDetalhe(id){log('abriu','Remessa #'+id);
     $('ok').onclick=()=>{const v=dinheiro(val('f_v'));if(isNaN(v)||v<0){$('modal').querySelector('.erro').textContent='Valor do frete inválido.';return;}
       rodar($('ok'),async()=>{await rpc('definir_frete',{p_remessa:r.id,p_frete:v});toast('Frete lançado.');await carregar();modalDetalhe(r.id);});};};
   $('modal').querySelectorAll('[data-anx]').forEach(b=>b.onclick=()=>abrirAnexo(r,+b.dataset.anx));
+  $('modal').querySelectorAll('[data-anxdel]').forEach(b=>b.onclick=()=>removerAnexo(r,+b.dataset.anxdel));
   if($('anx_add')){$('anx_add').onclick=()=>$('anx_arq').click();
     $('anx_arq').onchange=()=>{const fs=[...$('anx_arq').files];if(!fs.length)return;const b=$('anx_add');b.textContent='Enviando…';
       rodar(b,async()=>{try{for(const f of fs)await enviarAnexo(r.id,f);}catch(e){b.textContent='📎 Anexar etiqueta';$('anx_arq').value='';throw e;}
