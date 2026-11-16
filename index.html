@@ -406,7 +406,7 @@ function abaNotas(){
   const notas=D.notas.filter(n=>bate(n.numero,n.fornecedor));
   const nota=id=>D.notas.find(n=>n.id===id)||{};
   const bols=D.boletos.filter(b=>bate(nota(b.nota_id).numero,nota(b.nota_id).fornecedor));
-  return barraBusca('Buscar nota ou fornecedor…','<button data-act="planilha">Baixar planilha</button>'+(podeCusto()?'<button data-act="novanota">+ Nota manual</button><button class="primary" data-act="entradanf">+ Entrada por NF (XML)</button>':''))+
+  return barraBusca('Buscar nota ou fornecedor…','<button data-act="planilha">Baixar planilha</button>'+(podeCusto()?'<button data-act="novanota">+ Nota manual</button><button class="primary" data-act="entradanf">+ Entrada por NF (PDF ou XML)</button>':''))+
   `<div class="resumo"><div class="kpi"><div class="n">${brl(soma(ab))}</div><div class="l">Total a pagar (${ab.length} boletos)</div></div>
    <div class="kpi"><div class="n">${brl(soma(prox))}</div><div class="l">Vence em 30 dias</div></div>
    <div class="kpi"><div class="n" style="color:${venc.length?'var(--red)':'inherit'}">${brl(soma(venc))}</div><div class="l">Vencidos</div></div></div>
@@ -425,7 +425,7 @@ function abaNotas(){
 function addDias(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);}
 // ---------- entrada por nota fiscal (XML da NF-e) ----------
 const TIPOS_PAG={'01':'Dinheiro','02':'Cheque','03':'Cartão de crédito','04':'Cartão de débito','05':'Crédito loja','10':'Vale alimentação','11':'Vale refeição','12':'Vale presente','13':'Vale combustível','14':'Duplicata mercantil','15':'Boleto bancário','16':'Depósito bancário','17':'PIX','18':'Transferência','19':'Fidelidade/cashback','90':'Sem pagamento','99':'Outros'};
-const MODOS_CUSTO={item:'Valor do item na nota (com desconto)',total:'Item + impostos e frete da nota (IPI, ST, frete)',boletos:'Proporcional ao valor dos boletos (custo real pago)'};
+const MODOS_CUSTO={item:'Valor do item na nota (com desconto)',total:'Item + impostos e frete da nota (IPI, ST, frete)',boletos:'Proporcional ao valor dos boletos (custo real pago)',planilha:'Custo médio da planilha de custo (Thalita)'};
 const fnum=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
 const soDig=s=>String(s||'').replace(/\D/g,'');
 const normal=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
@@ -472,21 +472,76 @@ function acharProdutoNF(it,cnpj){
 let NF=null;
 function modalEntradaNF(){
   NF=null;
-  abrir(`<h2>Entrada por nota fiscal</h2><div class="sub">Envie o XML da NF-e. O sistema lê a nota inteira: produtos, quantidades, valores, impostos e boletos. Você confere e lança tudo de uma vez.</div>
-  <div class="campo"><label>Arquivo XML da nota</label><input id="nf_xml" type="file" accept=".xml,text/xml,application/xml"></div>
-  <div class="meta">O XML é o arquivo <b>.xml</b> que o fornecedor manda junto com o PDF da nota (DANFE). O PDF e os boletos você anexa no próximo passo.</div>
+  abrir(`<h2>Entrada por nota fiscal</h2><div class="sub">Envie o <b>PDF da nota</b> (pode ser foto escaneada, com várias notas e boletos no mesmo arquivo) ou o <b>XML</b>. O sistema lê tudo sozinho: produtos, quantidades, valores, impostos e boletos. Você confere e lança.</div>
+  <div class="campo"><label>Arquivo da nota (PDF, foto ou XML)</label><input id="nf_xml" type="file" accept=".xml,text/xml,application/xml,application/pdf,image/*"></div>
+  <div class="total hidden" id="nf_prog"></div>
   <div class="erro"></div><div class="rodape"><button id="cx">Cancelar</button></div>`);
   $('cx').onclick=fechar;
   $('nf_xml').onchange=async()=>{const f=$('nf_xml').files[0];const er=$('modal').querySelector('.erro');er.textContent='';if(!f)return;
-    try{const txt=await f.text();const d=lerXmlNFe(txt);
-      const ja=d.chave&&D.notas.find(n=>n.chave===d.chave);
-      if(ja)throw new Error('Esta nota já foi lançada (NF '+ja.numero+' de '+fd(ja.emissao)+'). Abra ela em "Notas e boletos".');
-      const pareceDup=!d.chave?null:D.notas.find(n=>!n.chave&&n.numero===d.numero&&soDig(n.cnpj)===soDig(d.cnpj));
-      NF={d,arq:f,modo:'item',data:hoje(),obs:'',aviso:pareceDup?'Já existe uma NF '+d.numero+' deste fornecedor cadastrada à mão. Confira para não lançar o estoque em dobro.':'',
-        linhas:d.itens.map(it=>{const m=acharProdutoNF(it,d.cnpj);return {it,pid:m.pid,fator:m.fator,como:m.como,lancar:true};}),
-        bols:d.dups.map((b,i,a)=>({parcela:b.parcela||((i+1)+'/'+a.length),vencimento:b.vencimento,valor:b.valor}))};
-      log('acao','Leu XML da NF '+d.numero+' ('+d.fornecedor+')');telaConferirNF();
-    }catch(e){er.textContent=msgErro(e);$('nf_xml').value='';}};
+    try{
+      if(/\.xml$/i.test(f.name)||/xml/.test(f.type)){const d=lerXmlNFe(await f.text());iniciarConferencia(d,f,'xml');log('acao','Leu XML da NF '+d.numero+' ('+d.fornecedor+')');return;}
+      if(f.size>30*1024*1024)throw new Error('O arquivo passa de 30 MB.');
+      $('nf_xml').disabled=true;const notas=await lerPdfIA(f,t=>{const p=$('nf_prog');if(p){p.classList.remove('hidden');p.innerHTML=t;}});
+      if(!notas.length)throw new Error('Não encontrei nenhuma nota fiscal neste arquivo.');
+      NF_LISTA={arq:f,notas,feitas:{}};log('acao','Leu PDF com IA: '+f.name+' ('+notas.length+' nota(s))');
+      if(notas.length===1)iniciarConferencia(notas[0],f,'pdf');else telaListaPdf();
+    }catch(e){er.textContent=msgErro(e);$('nf_xml').value='';$('nf_xml').disabled=false;const p=$('nf_prog');if(p)p.classList.add('hidden');}};
+}
+let NF_LISTA=null;
+async function lerPdfIA(f,prog){
+  const ext=((f.name.match(/\.([a-z0-9]{1,5})$/i)||[])[1]||'pdf').toLowerCase();
+  const caminho='tmp/'+Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+ext;
+  prog('📤 Enviando o arquivo…');
+  const up=await sb.storage.from('notas').upload(caminho,f,{contentType:f.type||'application/pdf',upsert:false});if(up.error)throw up.error;
+  try{
+    prog('🔎 Lendo a nota com inteligência artificial… pode levar de 30 segundos a 2 minutos, conforme o tamanho.');
+    const {data:{session}}=await sb.auth.getSession();
+    const r=await fetch(SUPABASE_URL+'/functions/v1/ler-nota',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({caminho})});
+    if(!r.ok){let m='';try{m=(await r.json()).error;}catch(e){}throw new Error(m||('Falha na leitura ('+r.status+').'));}
+    const rd=r.body.getReader(),dec=new TextDecoder();let txt='',t0=Date.now();
+    while(true){const {done,value}=await rd.read();if(done)break;txt+=dec.decode(value,{stream:true});
+      const it=(txt.match(/\],\[/g)||[]).length;prog('🔎 Lendo a nota… '+(it?it+' item(ns) lidos · ':'')+Math.round((Date.now()-t0)/1000)+'s');}
+    if(txt.includes('<<ERRO>>'))throw new Error('A leitura foi interrompida: '+txt.split('<<ERRO>>')[1].slice(0,200));
+    const ini=txt.indexOf('{'),fim=txt.lastIndexOf('}');if(ini<0||fim<0)throw new Error('Não consegui ler a nota. Tente um PDF mais nítido.');
+    const j=JSON.parse(txt.slice(ini,fim+1));
+    return (j.notas||[]).map(notaIAparaD);
+  }finally{sb.storage.from('notas').remove([caminho]).then(()=>{},()=>{});}
+}
+function notaIAparaD(n){
+  const f=v=>{const x=typeof v==='string'?parseFloat(v.replace(/\./g,'').replace(',','.')):+v;return isNaN(x)?0:x;};
+  const itens=(n.itens||[]).map((a,k)=>{const it={n:k+1,codigo:String(a[0]||''),ean:/^\d{8,14}$/.test(String(a[1]||''))?String(a[1]):'',nome:String(a[2]||''),ncm:String(a[3]||''),cfop:'',un:String(a[4]||''),
+    qtd:f(a[5]),vun:f(a[6]),vprod:f(a[7])||+(f(a[5])*f(a[6])).toFixed(2),desc:f(a[8]),frete:0,seg:0,outro:0,ipi:f(a[9]),st:f(a[10]),lote:'',validade:'',info:''};return it;});
+  const d={chave:/^\d{44}$/.test(soDig(n.chave))?soDig(n.chave):'',numero:soDig(n.numero).replace(/^0+/,'')||String(n.numero||''),serie:String(n.serie||''),modelo:'55',emissao:String(n.emissao||'').slice(0,10),
+    natureza:n.natureza||'',fornecedor:n.fornecedor||'',fantasia:'',cnpj:n.cnpj||'',uf:'',cidade:'',destinatario:n.destinatario||'',cnpjDest:n.cnpj_dest||'',
+    vprod:f(n.vprod),desc:f(n.desc),frete:f(n.frete),seg:f(n.seg),outro:f(n.outro),ipi:f(n.ipi),st:f(n.st),icms:0,vnf:f(n.vnf),fatura:null,pagamentos:[],protocolo:'',
+    info:[n.info,n.obs?'Observações da leitura: '+n.obs:''].filter(Boolean).join('\n'),itens,
+    dups:(n.dups||[]).map(b=>({parcela:String(b[0]||''),vencimento:String(b[1]||'').slice(0,10),valor:f(b[2])})),fonte:'pdf',obsLeitura:n.obs||''};
+  // rateia frete/seguro/outras do total da nota quando não vierem por item
+  const liqT=itens.reduce((s,i)=>s+(i.vprod-i.desc),0),extra=d.frete+d.seg+d.outro;
+  itens.forEach(i=>{i.liq=+(i.vprod-i.desc).toFixed(2);const r=liqT>0?i.liq/liqT:0;i.frete=+(d.frete*r).toFixed(2);i.seg=+(d.seg*r).toFixed(2);i.outro=+(d.outro*r).toFixed(2);
+    i.tot=+(i.liq+i.frete+i.seg+i.outro+i.ipi+i.st).toFixed(2);});
+  if(!d.vnf)d.vnf=+(liqT+extra+d.ipi+d.st).toFixed(2);if(!d.vprod)d.vprod=+itens.reduce((s,i)=>s+i.vprod,0).toFixed(2);
+  return d;
+}
+function notaJaLancada(d){return (d.chave&&D.notas.find(n=>n.chave===d.chave))||D.notas.find(n=>n.numero===d.numero&&soDig(n.cnpj)===soDig(d.cnpj)&&soDig(d.cnpj));}
+function telaListaPdf(){
+  const L=NF_LISTA;
+  abrir(`<h2>${L.notas.length} notas encontradas no arquivo</h2><div class="sub">${esc(L.arq.name)} · confira e lance uma de cada vez.</div>
+  <div class="lista">${L.notas.map((d,i)=>{const ja=notaJaLancada(d),feita=L.feitas[i];return `<div class="card"><div><div class="t">NF ${esc(d.numero)} — ${esc(d.fornecedor)}</div>
+    <div class="meta">Emissão ${fd(d.emissao)} · ${d.itens.length} itens · total ${brl(d.vnf)}${d.natureza?' · '+esc(d.natureza):''}</div>
+    ${feita?'<div class="ok">✓ Lançada agora</div>':ja?'<div class="warn">Já está no sistema</div>':''}</div>
+    <div>${feita||ja?'':`<button class="primary small" data-pdfn="${i}">Conferir e lançar</button>`}</div></div>`;}).join('')}</div>
+  <div class="erro"></div><div class="rodape"><button id="cx">Fechar</button></div>`,true);
+  $('cx').onclick=()=>{NF_LISTA=null;fechar();};
+  $('modal').querySelectorAll('[data-pdfn]').forEach(b=>b.onclick=()=>iniciarConferencia(L.notas[+b.dataset.pdfn],L.arq,'pdf',+b.dataset.pdfn));
+}
+function iniciarConferencia(d,arq,fonte,idx){
+  const ja=notaJaLancada(d);
+  if(ja){if(NF_LISTA&&fonte==='pdf'&&NF_LISTA.notas.length>1){toast('A NF '+d.numero+' já está no sistema.');return;}throw new Error('Esta nota já foi lançada (NF '+ja.numero+' de '+fd(ja.emissao)+'). Abra ela em "Notas e boletos".');}
+  NF={d,arq,fonte,idx,modo:'item',data:hoje(),obs:'',aviso:d.obsLeitura?'Leitura automática do PDF — confira os itens e valores. Observação da leitura: '+d.obsLeitura:(fonte==='pdf'?'Leitura automática do PDF — confira os itens e valores antes de lançar.':''),
+    linhas:d.itens.map(it=>{const m=acharProdutoNF(it,d.cnpj);return {it,pid:m.pid,fator:m.fator,como:m.como,lancar:it.qtd>0};}),
+    bols:d.dups.map((b,i,a)=>({parcela:b.parcela||((i+1)+'/'+a.length),vencimento:b.vencimento,valor:b.valor}))};
+  telaConferirNF();
 }
 function custoLinhaNF(l){
   const it=l.it,q=it.qtd||0;if(!q)return {qtd:0,custo:0,inteiro:false};
@@ -531,7 +586,7 @@ function telaConferirNF(){
   <div class="campo" style="margin-top:10px"><label>Observação</label><input id="nf_obs" value="${esc(NF.obs)}"></div>
   ${d.info?`<details style="margin:6px 0"><summary class="meta" style="cursor:pointer">Informações complementares da nota</summary><div class="meta" style="white-space:pre-wrap">${esc(d.info)}</div></details>`:''}
   <div class="total" id="nf_res"></div>
-  <div class="erro"></div><div class="rodape"><button id="cx">Cancelar</button><button id="nf_volta">Trocar XML</button><button class="primary" id="ok">Lançar entrada</button></div></div>`,true);
+  <div class="erro"></div><div class="rodape"><button id="cx">Cancelar</button><button id="nf_volta">Trocar arquivo</button><button class="primary" id="ok">Lançar entrada</button></div></div>`,true);
   NF.linhas.forEach((l,i)=>{$('modal').querySelector(`[data-nfp="${i}"]`).value=l.pid;});
   const desenharBols=()=>{$('nf_bols').innerHTML=NF.bols.length?NF.bols.map((b,i)=>`<div class="tres" style="margin-bottom:6px;grid-template-columns:90px 1fr 1fr 1.3fr 40px;align-items:center"><input data-bp="${i}" value="${esc(b.parcela)}" placeholder="Parcela"><input type="date" data-bv="${i}" value="${esc(b.vencimento)}"><input inputmode="decimal" data-bval="${i}" value="${b.valor===''?'':Number(b.valor).toFixed(2).replace('.',',')}" placeholder="Valor">${b.arq?`<span class="meta" style="margin:0">📄 ${esc(b.arq.name)} <button class="link" data-barx="${i}">trocar</button></span>`:`<button class="small" data-barq="${i}">📎 PDF do boleto</button>`}<button class="small" data-bdel="${i}" title="Remover">✕</button></div>`).join(''):'<div class="meta" style="margin-bottom:6px">A nota não traz boletos. Se houver parcelas, adicione aqui.</div>';};
   const recalc=()=>{let tot=0,n=0,un_=0,prob=0;
@@ -563,7 +618,7 @@ function telaConferirNF(){
     if(t.dataset.bdel!=null){NF.bols.splice(+t.dataset.bdel,1);desenharBols();recalc();return;}
     const i=+(t.dataset.barq??t.dataset.barx);const fs=await escolherArquivos(false);if(fs.length&&NF&&NF.bols[i]){NF.bols[i].arq=fs[0];desenharBols();}});
   $('nf_addb').onclick=()=>{NF.bols.push({parcela:(NF.bols.length+1)+'',vencimento:'',valor:''});desenharBols();recalc();};
-  $('cx').onclick=()=>{NF=null;fechar();};$('nf_volta').onclick=modalEntradaNF;
+  $('cx').onclick=()=>{NF=null;if(NF_LISTA&&NF_LISTA.notas.length>1)telaListaPdf();else fechar();};$('nf_volta').onclick=()=>{NF_LISTA=null;modalEntradaNF();};
   $('ok').onclick=()=>{const er=$('modal').querySelector('.erro');er.textContent='';
     const lin=NF.linhas.filter(l=>l.lancar);
     if(!lin.length){er.textContent='Marque pelo menos um produto para lançar.';return;}
@@ -586,10 +641,10 @@ function telaConferirNF(){
       const nid=await rpc('entrada_por_nota',{p:payload});
       const falhas=[];
       const env=async(f,tipo)=>{try{await enviarArqNota(nid,f,tipo);}catch(e){falhas.push(f.name);}};
-      await env(NF.arq,'xml');for(const f of docs)await env(f,'documento');falhas.push(...await anexarBoletosDaNota(nid,bfs));
-      NF=null;await carregar();fechar();
+      await env(NF.arq,NF.fonte==='pdf'?'documento':'xml');for(const f of docs)await env(f,'documento');falhas.push(...await anexarBoletosDaNota(nid,bfs));
+      const idxL=NF.idx,lista=NF_LISTA&&NF_LISTA.notas.length>1?NF_LISTA:null;NF=null;await carregar();fechar();
       toast(falhas.length?'Entrada lançada, mas não foi possível anexar: '+falhas.join(', '):'Entrada da NF '+d.numero+' lançada.');
-      aba='notas';render();modalNota(nid);});};
+      aba='notas';render();if(lista){lista.feitas[idxL]=nid;telaListaPdf();}else modalNota(nid);});};
 }
 async function enviarArqNota(nid,f,tipo,bid){
   if(f.size>20*1024*1024)throw new Error('O arquivo '+f.name+' passa de 20 MB.');
@@ -619,7 +674,7 @@ async function anexarBoletosDaNota(nid,arqs){if(!arqs.some(Boolean))return [];co
   return falhas;}
 const TIPOS_ARQ={xml:'XML da nota',documento:'Documento',boleto:'Boleto',comprovante:'Comprovante de pagamento'};
 
-function baseConf(n,sb_){return n.modo_custo==='item'?(+n.valor_produtos-(+n.desconto||0)):n.modo_custo==='boletos'?sb_:+n.valor_total;}
+function baseConf(n,sb_){if(n.modo_custo==='planilha')return +((n.dados&&n.dados.custo_final)||n.valor_total);return n.modo_custo==='item'?(+n.valor_produtos-(+n.desconto||0)):n.modo_custo==='boletos'?sb_:+n.valor_total;}
 function conferencia(n){
   const bs=D.boletos.filter(b=>b.nota_id===n.id);const sb_=bs.reduce((s,b)=>s+ +b.valor,0);
   const es=D.entradas.filter(e=>(e.nf||'')===n.numero);const se=es.reduce((s,e)=>s+e.qtd*e.custo_unit,0);
