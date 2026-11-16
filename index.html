@@ -575,13 +575,75 @@ function modalProduto(pid){
    ${verCusto()&&c?`<div class="kpi"><div class="n">${brl(c.custo_medio,2)}</div><div class="l">Custo médio</div></div>`:''}</div>
   ${verCusto()&&ents.length?`<h3>Últimas entradas</h3><div class="scroll"><table class="planilha"><tr><th>Data</th><th>NF</th><th class="n">Qtd</th><th class="n">Custo unit.</th></tr>${ents.map(e=>`<tr><td>${fd(e.data)}</td><td>${esc(e.nf||'')}</td><td class="n">${un(e.qtd)}</td><td class="n">${brl(e.custo_unit,4)}</td></tr>`).join('')}</table></div>`:''}
   ${rems.length?`<h3>Remessas</h3><div class="scroll"><table class="planilha"><tr><th>Remessa</th><th>Saída</th><th>Situação</th><th class="n">Enviado</th><th class="n">No depósito</th></tr>${rems.slice(0,10).map(({r,i})=>`<tr><td>#${r.id}</td><td>${fd(r.data_saida)}</td><td>${r.status==='em_rota'?'Em rota':'Chegou '+fd(r.data_chegada)}</td><td class="n">${un(i.qtd_enviada)}</td><td class="n">${un(i.disp)}</td></tr>`).join('')}</table></div>`:''}
-  <div class="erro"></div><div class="rodape"><button id="cx">Fechar</button></div>`);
+  <div class="erro"></div><div class="rodape">${podeCusto()?'<button id="pf_etq">🏷 Etiquetas deste produto</button>':''}<button id="cx">Fechar</button></div>`);
   $('cx').onclick=fechar;
+  if($('pf_etq'))$('pf_etq').onclick=()=>{const fk=lerPref('tibiis_etq','t5030');abrir(`<h2>Etiquetas — ${esc(p.nome)}</h2><div class="sub">Código ${esc(codigoEtiqueta(p))}</div>
+    <div class="duas"><div class="campo"><label>Quantidade</label><input id="pe_q" inputmode="numeric" value="1"></div>
+    <div class="campo"><label>Tamanho</label><select id="pe_f">${Object.entries(FORMATOS).map(([k,f])=>`<option value="${k}" ${k===fk?'selected':''}>${f.nome}</option>`).join('')}</select></div></div>
+    <div class="erro"></div><div class="rodape"><button id="cx">Voltar</button><button class="primary" id="ok">Imprimir</button></div>`);
+    $('cx').onclick=()=>modalProduto(pid);$('pe_f').onchange=()=>gravarPref('tibiis_etq',$('pe_f').value);
+    $('ok').onclick=()=>{const n=num(val('pe_q'));if(!n||n>2000){$('modal').querySelector('.erro').textContent='Quantidade entre 1 e 2.000.';return;}imprimirEtiquetas([{p,n}],$('pe_f').value,null);};};
   if($('pf_img'))$('pf_img').onclick=()=>ampliar(p.foto_url);
   if($('pf_tirar')){$('pf_tirar').onclick=()=>$('pf_arq').click();
     $('pf_arq').onchange=()=>{const f=$('pf_arq').files[0];if(!f)return;const b=$('pf_tirar'),rot=b.textContent;b.textContent='Enviando foto…';
       rodar(b,async()=>{try{await enviarFoto(pid,f);}catch(e){b.textContent=rot;$('pf_arq').value='';throw e;}toast('Foto salva.');render();modalProduto(pid);});};}
   if($('pf_rem'))$('pf_rem').onclick=()=>rodar($('pf_rem'),async()=>{const ant=p.foto_url;await rpc('definir_foto',{p_produto:pid,p_url:''});apagarFotoAntiga(ant);p.foto_url=null;toast('Foto removida.');render();modalProduto(pid);});
+}
+
+// ---------- etiquetas ----------
+const C128=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];
+function codigoEtiqueta(p){const t=String(p.sku||'').normalize('NFD').replace(/[^\x20-\x7e]/g,'').trim();return t||('P'+p.id);}
+function barras(txt){
+  const v=[...txt].map(c=>c.charCodeAt(0)-32);let ck=104;v.forEach((x,i)=>ck+=x*(i+1));
+  const cod=[104,...v,ck%103,106].map(i=>C128[i]).join('');
+  let x=10,r='';[...cod].forEach((w,i)=>{w=+w;if(i%2===0)r+=`<rect x="${x}" y="0" width="${w}" height="40"/>`;x+=w;});
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x+10} 40" preserveAspectRatio="none">${r}</svg>`;
+}
+const FORMATOS={
+  t5030:{nome:'Térmica 50 × 30 mm (1 por etiqueta)',w:50,h:30,a4:false},
+  t6040:{nome:'Térmica 60 × 40 mm (1 por etiqueta)',w:60,h:40,a4:false},
+  t4025:{nome:'Térmica 40 × 25 mm (1 por etiqueta)',w:40,h:25,a4:false},
+  a4:{nome:'Folha A4 com 30 etiquetas (63,5 × 25,4 mm)',w:63.5,h:25.4,a4:true}};
+function lerPref(k,d){try{return localStorage.getItem(k)||d;}catch(e){return d;}}
+function gravarPref(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function imprimirEtiquetas(lista,fmtK,rem){
+  const f=FORMATOS[fmtK]||FORMATOS.t5030;const dt=rem?fd(rem.data_saida):'';
+  const um_=it=>`<div class="et"><div class="nm">${esc(it.p.nome)}</div><div class="bc">${barras(codigoEtiqueta(it.p))}</div><div class="cd">${esc(codigoEtiqueta(it.p))}</div>${rem?`<div class="rm">Remessa #${rem.id} · ${dt}</div>`:''}</div>`;
+  const todas=[];lista.forEach(it=>{for(let i=0;i<it.n;i++)todas.push(um_(it));});
+  const fs=Math.max(6.5,f.h*0.27);
+  const css=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#000}
+  .et{width:${f.w}mm;height:${f.h}mm;padding:1.4mm 2mm;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+  .nm{font-size:${fs}pt;font-weight:700;line-height:1.1;max-height:2.25em;overflow:hidden;text-transform:uppercase}
+  .bc{flex:1;min-height:0;margin:.8mm 0}.bc svg{width:100%;height:100%;display:block}
+  .cd{font-size:${fs*1.05}pt;font-weight:700;text-align:center;letter-spacing:.3px;line-height:1}
+  .rm{font-size:${Math.max(5.5,fs*.75)}pt;text-align:center;line-height:1.1;margin-top:.4mm}`+
+  (f.a4?`@page{size:A4;margin:12.9mm 7.2mm}.folha{display:grid;grid-template-columns:repeat(3,${f.w}mm);grid-auto-rows:${f.h}mm;column-gap:2.5mm}`
+       :`@page{size:${f.w}mm ${f.h}mm;margin:0}.et{page-break-after:always;break-after:page}.et:last-child{page-break-after:auto;break-after:auto}`);
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiquetas</title><style>${css}</style></head><body>${f.a4?`<div class="folha">${todas.join('')}</div>`:todas.join('')}</body></html>`;
+  const fr=document.createElement('iframe');fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';document.body.appendChild(fr);
+  const d=fr.contentWindow.document;d.open();d.write(html);d.close();
+  setTimeout(()=>{fr.contentWindow.focus();fr.contentWindow.print();setTimeout(()=>fr.remove(),60000);},400);
+  log('acao','Imprimiu '+todas.length+' etiqueta(s)'+(rem?' da remessa #'+rem.id:''));
+}
+function modalEtiquetas(rid,nova){
+  const r=D.remessas.find(x=>x.id===rid);if(!r)return;
+  const it=itensRem(r).map(i=>({p:produto(i.produto_id),q:i.qtd_enviada}));
+  const fk=lerPref('tibiis_etq','t5030');
+  abrir(`<h2>${nova?'Remessa #'+r.id+' criada! ':''}Etiquetas dos produtos</h2>
+  <div class="sub">Uma etiqueta por unidade, com nome, código de barras do SKU/EAN e o número da remessa. Ajuste a quantidade se precisar.</div>
+  <div class="campo"><label>Tamanho da etiqueta</label><select id="et_fmt">${Object.entries(FORMATOS).map(([k,f])=>`<option value="${k}" ${k===fk?'selected':''}>${f.nome}</option>`).join('')}</select></div>
+  <div class="tab rolar">${it.map((x,i)=>`<div class="lin"><div class="pinfo">${foto(x.p,1)}<div>${esc(x.p.nome)}<div class="meta">${esc(codigoEtiqueta(x.p))}${x.p.sku?'':' <span class="warn" style="font-size:12px">(sem SKU, usa código interno)</span>'} · enviado ${un(x.q)}</div></div></div>
+    <input data-et="${i}" inputmode="numeric" value="${x.q}"></div>`).join('')}</div>
+  <div class="total" id="et_tot"></div>
+  <div class="meta">Na janela de impressão, escolha a impressora de etiquetas e deixe a escala em 100% (sem "ajustar à página").</div>
+  <div class="erro"></div><div class="rodape"><button id="cx">${nova?'Agora não':'Voltar'}</button><button class="primary" id="ok">Imprimir etiquetas</button></div>`);
+  const tot=()=>{const n=[...$('modal').querySelectorAll('[data-et]')].reduce((s,e)=>s+num(e.value),0);$('et_tot').innerHTML=`<b>${un(n)} etiqueta(s)</b>`+($('et_fmt').value==='a4'?` · ${un(Math.ceil(n/30))} folha(s) A4`:'');return n;};
+  tot();$('modal').addEventListener('input',tot);$('et_fmt').onchange=()=>{gravarPref('tibiis_etq',$('et_fmt').value);tot();};
+  $('cx').onclick=()=>nova?fechar():modalDetalhe(rid);
+  $('ok').onclick=()=>{const n=tot();if(!n){$('modal').querySelector('.erro').textContent='Informe a quantidade de etiquetas.';return;}
+    if(n>2000){$('modal').querySelector('.erro').textContent='Máximo de 2.000 etiquetas por vez.';return;}
+    const lista=it.map((x,i)=>({p:x.p,n:num($('modal').querySelector(`[data-et="${i}"]`).value)})).filter(x=>x.n>0);
+    imprimirEtiquetas(lista,$('et_fmt').value,r);};
 }
 
 function modalRemessa(){
@@ -613,7 +675,7 @@ function modalRemessa(){
     if(exc.length){er.textContent='Há quantidades acima do disponível em Cuiabá.';return;}
     const fr=val('r_frete')?dinheiro(val('r_frete')):0;if(isNaN(fr)){er.textContent='Valor do frete inválido.';return;}
     rodar($('ok'),async()=>{const id=await rpc('criar_remessa',{p_data:val('r_data')||hoje(),p_cte:val('r_cte'),p_volumes:val('r_vol')?num(val('r_vol')):null,p_frete:fr,p_obs:val('r_obs'),p_itens:its.map(x=>({produto_id:x.pid,qtd:x.q}))});
-      toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();fechar();});};
+      toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();modalEtiquetas(id,true);});};
 }
 
 function modalDetalhe(id){log('abriu','Remessa #'+id);
@@ -633,10 +695,11 @@ function modalDetalhe(id){log('abriu','Remessa #'+id);
   ${r.obs?'<br>Obs.: '+esc(r.obs):''}</div>
   ${c&&verCusto()?`<div class="total">Frete Carvalima <b>${brl(c.frete)}</b> ÷ ${un(env)} un. = <b>${brl(c.frete_unit,4)} por unidade</b></div>`:''}
   ${linhas}<div class="erro"></div>
-  <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}
+  <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}${r.status!=='cancelada'&&podeCusto()?`<button id="etq">🏷 Imprimir etiquetas</button>`:''}
   ${r.status==='em_rota'&&podeSP()?`<button class="primary" id="cheg">Confirmar chegada</button>`:''}<button id="cx">Fechar</button></div>`);
   $('cx').onclick=fechar;
   if($('cheg'))$('cheg').onclick=()=>modalChegada(r.id);
+  if($('etq'))$('etq').onclick=()=>modalEtiquetas(r.id,false);
   if($('canc'))$('canc').onclick=()=>confirmar('Cancelar a remessa #'+r.id+'?','As quantidades voltam para o estoque de Cuiabá.','Cancelar remessa',async()=>{await rpc('cancelar_remessa',{p_remessa:r.id});toast('Remessa cancelada.');await carregar();});
   $('modal').querySelectorAll('[data-encam]').forEach(b=>b.onclick=()=>modalEncaminhar(+b.dataset.r,+b.dataset.encam));
   $('modal').querySelectorAll('[data-zoom]').forEach(b=>{if(b.dataset.zoom)b.onclick=()=>ampliar(b.dataset.zoom);});
