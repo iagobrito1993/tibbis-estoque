@@ -166,6 +166,8 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden'
 function podeCusto(){return perfil&&['admin','cuiaba'].includes(perfil.papel);}
 function verCusto(){return perfil&&['admin','cuiaba','socio'].includes(perfil.papel);}
 function podeSP(){return perfil&&['admin','sp'].includes(perfil.papel);}
+function podeRemessa(){return perfil&&['admin','cuiaba','sp'].includes(perfil.papel);}
+function verEstoqueCuiaba(){return verCusto()||podeRemessa();}
 function ehAdmin(){return perfil&&perfil.papel==='admin';}
 function podeFoto(){return perfil&&['admin','cuiaba','sp'].includes(perfil.papel);}
 function foto(p,peq){return `<div class="foto${peq?' p':''}">${p&&p.foto_url?`<img src="${esc(p.foto_url)}" alt="" loading="lazy">`:'📷'}</div>`;}
@@ -204,7 +206,7 @@ function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesper
   if(/exceeded the maximum allowed size|Payload too large/i.test(m))return 'A foto é grande demais. Tente outra.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Sem conexão com a internet. Tente de novo.';
   return m;}
-const NOMES_ACAO={registrar_entrada:'Registrou entrada de mercadoria',criar_remessa:'Criou remessa para SP',cancelar_remessa:'Cancelou remessa',confirmar_chegada:'Confirmou chegada em SP',encaminhar:'Encaminhou mercadoria',desfazer_encaminhamento:'Desfez encaminhamento',salvar_nota:'Salvou nota fiscal',marcar_boleto:'Alterou boleto',excluir_nota:'Excluiu nota',definir_papel:'Alterou acesso de usuário',salvar_whatsapp:'Alterou configuração do WhatsApp',definir_foto:'Anexou/alterou foto de produto',testar_whatsapp:'Testou WhatsApp',ativar_numero:'Ativou número WhatsApp',zerar_tudo:'Zerou o sistema'};
+const NOMES_ACAO={registrar_entrada:'Registrou entrada de mercadoria',criar_remessa:'Criou remessa para SP',definir_frete:'Lançou frete da remessa',cancelar_remessa:'Cancelou remessa',confirmar_chegada:'Confirmou chegada em SP',encaminhar:'Encaminhou mercadoria',desfazer_encaminhamento:'Desfez encaminhamento',salvar_nota:'Salvou nota fiscal',marcar_boleto:'Alterou boleto',excluir_nota:'Excluiu nota',definir_papel:'Alterou acesso de usuário',salvar_whatsapp:'Alterou configuração do WhatsApp',definir_foto:'Anexou/alterou foto de produto',testar_whatsapp:'Testou WhatsApp',ativar_numero:'Ativou número WhatsApp',zerar_tudo:'Zerou o sistema'};
 function log(ev,d){try{sb.rpc('registrar_acesso',{p_evento:ev,p_detalhe:d==null?null:String(d).slice(0,300)}).then(()=>{},()=>{});}catch(e){}}
 async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;log('acao',NOMES_ACAO[fn]||fn);return data;}
 
@@ -281,13 +283,14 @@ async function carregarPerfil(){
 async function carregar(){
   if(carregando)return;carregando=true;
   try{
-    const sel='*, remessas_custo(frete,frete_unit), remessa_itens(id,produto_id,qtd_enviada,qtd_recebida, remessa_itens_custo(custo_medio_saida,frete_unit,custo_sp), encaminhamentos(id,qtd,destino,conta,envio,data,obs,criado_por,criado_em))';
+    const sel='*, remessas_custo(frete,frete_unit), remessa_itens(id,produto_id,qtd_enviada,qtd_recebida, remessa_itens_custo(custo_medio_saida,frete_unit,custo_sp), encaminhamentos(id,qtd,destino,conta,envio,data,obs,criado_por,criado_em)), remessa_anexos(id,nome,caminho,tamanho,criado_por,criado_em)';
     const reqs=[sb.from('produtos').select('id,nome,sku,foto_url,produtos_custo(qtd_cuiaba,custo_medio)').order('nome'),
       sb.from('remessas').select(sel).order('id',{ascending:false}).limit(400),
       sb.from('perfis').select('*').order('nome')];
     if(verCusto()){reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(2000));
       reqs.push(sb.from('notas').select('*').order('emissao',{ascending:false}).limit(500));
       reqs.push(sb.from('boletos').select('*').order('vencimento').limit(3000));}
+    if(!verCusto()&&podeRemessa())reqs[0]=Promise.all([sb.from('produtos').select('id,nome,sku,foto_url').order('nome'),sb.rpc('estoque_cuiaba')]).then(([a,b])=>{if(a.error||b.error)return a.error?a:b;const m={};(b.data||[]).forEach(x=>m[x.produto_id]=x.qtd_cuiaba);return {data:a.data.map(p=>({...p,produtos_custo:p.id in m?[{qtd_cuiaba:m[p.id],custo_medio:null}]:[]}))};});
     const pa=ehAdmin()?sb.from('acessos').select('*').order('id',{ascending:false}).limit(800):null;
     const r=await Promise.all(reqs);
     const e=r.find(x=>x.error);if(e)throw e.error;
@@ -305,7 +308,7 @@ function itensRem(r){return (r.remessa_itens||[]).map(i=>{const enc=(i.encaminha
 // ---------- tela principal ----------
 function abasDoPapel(){
   const a=[];
-  if(verCusto())a.push(['cuiaba','Estoque Cuiabá']);
+  if(verEstoqueCuiaba())a.push(['cuiaba','Estoque Cuiabá']);
   a.push(['remessas','Remessas']);a.push(['sp','Estoque SP']);
   if(verCusto()){a.push(['entradas','Entradas']);a.push(['notas','Notas e boletos']);}
   if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['acessos','Acessos']);a.push(['whatsapp','WhatsApp']);}
@@ -329,15 +332,15 @@ function abaCuiaba(){
   const lst=D.produtos.map(p=>({...p,c:um(p.produtos_custo)})).filter(p=>p.c&&bate(p.nome,p.sku))
     .sort((a,b)=>(b.c.qtd_cuiaba>0)-(a.c.qtd_cuiaba>0)||a.nome.localeCompare(b.nome));
   const comEst=lst.filter(p=>p.c.qtd_cuiaba>0);
-  const tu=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba,0),tv=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba*p.c.custo_medio,0);
-  return barraBusca('Buscar produto ou SKU…',podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button><button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
+  const tu=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba,0),tv=comEst.reduce((s,p)=>s+p.c.qtd_cuiaba*p.c.custo_medio,0),vc=verCusto();
+  return barraBusca('Buscar produto ou SKU…',(podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button>':'')+(podeRemessa()?'<button class="primary" data-act="remessa">+ Nova remessa</button>':''))+
   `<div class="resumo"><div class="kpi"><div class="n">${un(comEst.length)}</div><div class="l">Produtos em estoque</div></div>
    <div class="kpi"><div class="n">${un(tu)}</div><div class="l">Unidades em Cuiabá</div></div>
-   <div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div>
+   ${vc?`<div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div>`:''}
    <div class="kpi"><div class="n">${un(comEst.filter(p=>!p.foto_url).length)}</div><div class="l">Produtos sem foto</div></div></div>
   <div class="lista">${lst.length?lst.map(p=>`<div class="card click" data-prod="${p.id}" style="${p.c.qtd_cuiaba>0?'':'opacity:.55'}"><div class="pinfo">${foto(p)}<div><div class="t">${esc(p.nome)}</div>
-    <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku)+' · ':''}Custo médio <b>${brl(p.c.custo_medio,4)}</b></div>${p.foto_url?'':'<div class="semfoto">Sem foto</div>'}</div></div>
-    <div class="dir"><div class="n">${un(p.c.qtd_cuiaba)} un.</div><div class="meta">${brl(p.c.qtd_cuiaba*p.c.custo_medio)}</div></div></div>`).join('')
+    <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku):''}${vc?(p.sku?' · ':'')+'Custo médio <b>'+brl(p.c.custo_medio,4)+'</b>':''}</div>${p.foto_url?'':'<div class="semfoto">Sem foto</div>'}</div></div>
+    <div class="dir"><div class="n">${un(p.c.qtd_cuiaba)} un.</div>${vc?`<div class="meta">${brl(p.c.qtd_cuiaba*p.c.custo_medio)}</div>`:''}</div></div>`).join('')
     :`<div class="vazio">${D.produtos.length?'Nada encontrado.':'Nenhum produto ainda. Toque em <b>+ Entrada</b> quando a mercadoria chegar na Tibiis.'}</div>`}</div>`;
 }
 
@@ -345,7 +348,7 @@ function abaRemessas(){
   const f={rota:r=>r.status==='em_rota',rec:r=>r.status==='recebida',todas:()=>true}[filtroRem];
   const lst=D.remessas.filter(f).filter(r=>bate('#'+r.id,r.cte,...itensRem(r).map(i=>produto(i.produto_id).nome+' '+(produto(i.produto_id).sku||''))));
   const cont={rota:D.remessas.filter(r=>r.status==='em_rota').length,rec:D.remessas.filter(r=>r.status==='recebida').length};
-  return barraBusca('Buscar remessa, CT-e ou produto…',podeCusto()?'<button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
+  return barraBusca('Buscar remessa, CT-e ou produto…',podeRemessa()?'<button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
   `<div class="chips" style="margin-bottom:10px">${[['rota','Em rota ('+cont.rota+')'],['rec','Recebidas ('+cont.rec+')'],['todas','Todas']].map(([k,l])=>`<button class="${filtroRem===k?'on':''}" data-fr="${k}">${l}</button>`).join('')}</div>
   <div class="lista">${lst.length?lst.map(cardRemessa).join(''):`<div class="vazio">Nenhuma remessa ${filtroRem==='rota'?'em rota':filtroRem==='rec'?'recebida':''}.</div>`}</div>`;
 }
@@ -359,7 +362,7 @@ function cardRemessa(r){
     extra+=disp>0?`<div class="ok">${un(disp)} un. no depósito aguardando encaminhamento</div>`:`<div class="meta">Tudo encaminhado</div>`;}
   if(c&&verCusto())extra+=`<div class="meta">Frete ${brl(c.frete)} · ${brl(c.frete_unit,4)} por unidade</div>`;
   return `<div class="card click" data-rem="${r.id}"><div><div class="t">Remessa #${r.id} ${badgeRem(r.status)}</div>
-    <div class="meta">Saída ${fd(r.data_saida)}${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' vol.':''} · ${it.length} produto(s)</div>${extra}</div>
+    <div class="meta">Saída ${fd(r.data_saida)}${r.cte?' · CT-e '+esc(r.cte):''}${r.volumes?' · '+un(r.volumes)+' vol.':''} · ${it.length} produto(s)${(r.remessa_anexos||[]).length?' · 🏷 etiqueta anexada':''}</div>${extra}</div>
     <div class="dir"><div class="n">${un(env)} un.</div><button class="small">Abrir</button></div></div>`;
 }
 
@@ -569,13 +572,13 @@ function modalProduto(pid){
   ${podeFoto()?`<input id="pf_arq" type="file" accept="image/*" class="hidden">
   <div class="rodape" style="justify-content:flex-start;margin-top:10px"><button class="primary" id="pf_tirar">${p.foto_url?'Trocar foto':'Anexar foto'}</button>${p.foto_url?'<button class="danger" id="pf_rem">Remover foto</button>':''}</div>
   <div class="meta">No celular, você pode tirar a foto na hora ou escolher da galeria.</div>`:''}
-  <div class="resumo" style="margin-top:14px">${verCusto()&&c?`<div class="kpi"><div class="n">${un(c.qtd_cuiaba)}</div><div class="l">Em Cuiabá</div></div>`:''}
+  <div class="resumo" style="margin-top:14px">${verEstoqueCuiaba()&&c?`<div class="kpi"><div class="n">${un(c.qtd_cuiaba)}</div><div class="l">Em Cuiabá</div></div>`:''}
    <div class="kpi"><div class="n">${un(cam)}</div><div class="l">A caminho de SP</div></div>
    <div class="kpi"><div class="n">${un(dep)}</div><div class="l">No depósito SP</div></div>
    ${verCusto()&&c?`<div class="kpi"><div class="n">${brl(c.custo_medio,2)}</div><div class="l">Custo médio</div></div>`:''}</div>
   ${verCusto()&&ents.length?`<h3>Últimas entradas</h3><div class="scroll"><table class="planilha"><tr><th>Data</th><th>NF</th><th class="n">Qtd</th><th class="n">Custo unit.</th></tr>${ents.map(e=>`<tr><td>${fd(e.data)}</td><td>${esc(e.nf||'')}</td><td class="n">${un(e.qtd)}</td><td class="n">${brl(e.custo_unit,4)}</td></tr>`).join('')}</table></div>`:''}
   ${rems.length?`<h3>Remessas</h3><div class="scroll"><table class="planilha"><tr><th>Remessa</th><th>Saída</th><th>Situação</th><th class="n">Enviado</th><th class="n">No depósito</th></tr>${rems.slice(0,10).map(({r,i})=>`<tr><td>#${r.id}</td><td>${fd(r.data_saida)}</td><td>${r.status==='em_rota'?'Em rota':'Chegou '+fd(r.data_chegada)}</td><td class="n">${un(i.qtd_enviada)}</td><td class="n">${un(i.disp)}</td></tr>`).join('')}</table></div>`:''}
-  <div class="erro"></div><div class="rodape">${podeCusto()?'<button id="pf_etq">🏷 Etiquetas deste produto</button>':''}<button id="cx">Fechar</button></div>`);
+  <div class="erro"></div><div class="rodape"><button id="cx">Fechar</button></div>`);
   $('cx').onclick=fechar;
   if($('pf_etq'))$('pf_etq').onclick=()=>{const fk=lerPref('tibiis_etq','t5030');abrir(`<h2>Etiquetas — ${esc(p.nome)}</h2><div class="sub">Código ${esc(codigoEtiqueta(p))}</div>
     <div class="duas"><div class="campo"><label>Quantidade</label><input id="pe_q" inputmode="numeric" value="1"></div>
@@ -625,6 +628,28 @@ function imprimirEtiquetas(lista,fmtK,rem){
   setTimeout(()=>{fr.contentWindow.focus();fr.contentWindow.print();setTimeout(()=>fr.remove(),60000);},400);
   log('acao','Imprimiu '+todas.length+' etiqueta(s)'+(rem?' da remessa #'+rem.id:''));
 }
+// ---------- etiquetas do Mercado Livre (anexos da remessa) ----------
+function etqHTML(r){const a=(r.remessa_anexos||[]).slice().sort((x,y)=>x.id-y.id);
+  return `<div class="item"><b>🏷 Etiquetas do Mercado Livre</b>
+  ${a.length?a.map(x=>`<div class="enc"><span>📄 ${esc(x.nome)} · ${fts(x.criado_em)}${nomeDe(x.criado_por)?' · '+esc(nomeDe(x.criado_por)):''}</span><button class="small" data-anx="${x.id}">Abrir</button></div>`).join(''):'<div class="meta">Nenhuma etiqueta anexada ainda. Emita as etiquetas no Mercado Livre e anexe o arquivo aqui.</div>'}
+  ${podeFoto()&&r.status!=='cancelada'?`<input type="file" id="anx_arq" accept="application/pdf,image/png,image/jpeg" multiple hidden><div style="margin-top:8px"><button class="small primary" id="anx_add">📎 Anexar etiqueta</button> <span class="meta">PDF ou imagem, até 20 MB</span></div>`:''}</div>`;}
+async function enviarAnexo(rid,f){
+  if(f.size>20*1024*1024)throw new Error('O arquivo '+f.name+' passa de 20 MB.');
+  const ext=((f.name.match(/\.([a-z0-9]{1,5})$/i)||[])[1]||'pdf').toLowerCase();
+  const caminho='r'+rid+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+ext;
+  const {error}=await sb.storage.from('etiquetas').upload(caminho,f,{contentType:f.type||'application/pdf',upsert:false});
+  if(error)throw error;
+  const {error:e2}=await sb.from('remessa_anexos').insert({remessa_id:rid,nome:f.name.slice(0,150),caminho,tamanho:f.size});
+  if(e2){sb.storage.from('etiquetas').remove([caminho]).then(()=>{},()=>{});throw e2;}
+  log('acao','Anexou etiqueta na remessa #'+rid+': '+f.name);
+}
+async function abrirAnexo(r,aid){const x=(r.remessa_anexos||[]).find(a=>a.id===aid);if(!x)return;
+  const w=window.open('','_blank');
+  const {data,error}=await sb.storage.from('etiquetas').createSignedUrl(x.caminho,3600);
+  if(error||!data){if(w)w.close();toast('Não foi possível abrir o arquivo.');return;}
+  if(w)w.location.href=data.signedUrl;else location.href=data.signedUrl;
+  log('abriu','Etiqueta da remessa #'+r.id+': '+x.nome);
+}
 function modalEtiquetas(rid,nova){
   const r=D.remessas.find(x=>x.id===rid);if(!r)return;
   const it=itensRem(r).map(i=>({p:produto(i.produto_id),q:i.qtd_enviada}));
@@ -653,11 +678,11 @@ function modalRemessa(){
   <div class="tres"><div class="campo"><label>Data de saída</label><input id="r_data" type="date" value="${hoje()}"></div>
   <div class="campo"><label>CT-e / coleta</label><input id="r_cte"></div>
   <div class="campo"><label>Volumes</label><input id="r_vol" inputmode="numeric"></div></div>
-  <div class="duas"><div class="campo"><label>Frete Carvalima (R$)</label><input id="r_frete" inputmode="decimal" placeholder="0,00"></div>
-  <div class="campo"><label>Buscar produto</label><input id="r_busca" type="search"></div></div>
+  ${verCusto()?`<div class="duas"><div class="campo"><label>Frete Carvalima (R$)</label><input id="r_frete" inputmode="decimal" placeholder="0,00"></div>
+  <div class="campo"><label>Buscar produto</label><input id="r_busca" type="search"></div></div>`:`<div class="campo"><label>Buscar produto</label><input id="r_busca" type="search"></div>`}
   <div class="tab rolar">${ps.map(p=>`<div class="lin" data-lin="${p.id}" data-nome="${esc((p.nome+' '+(p.sku||'')).toLowerCase())}"><div class="pinfo">${foto(p,1)}<div><div>${esc(p.nome)}</div>
-    <div class="meta">Disponível ${un(p.c.qtd_cuiaba)} · custo ${brl(p.c.custo_medio,4)} <span data-csp="${p.id}"></span></div></div></div>
-    <input data-q="${p.id}" data-max="${p.c.qtd_cuiaba}" data-c="${p.c.custo_medio}" inputmode="numeric" placeholder="0"></div>`).join('')}</div>
+    <div class="meta">Disponível ${un(p.c.qtd_cuiaba)}${verCusto()?` · custo ${brl(p.c.custo_medio,4)} <span data-csp="${p.id}"></span>`:''}</div></div></div>
+    <input data-q="${p.id}" data-max="${p.c.qtd_cuiaba}" data-c="${verCusto()?p.c.custo_medio:0}" inputmode="numeric" placeholder="0"></div>`).join('')}</div>
   <div class="total" id="r_tot">Nenhum produto selecionado.</div>
   <div class="campo"><label>Observação</label><input id="r_obs"></div>
   <div class="erro"></div>
@@ -666,16 +691,16 @@ function modalRemessa(){
     const tot=its.reduce((s,x)=>s+x.q,0),fr=dinheiro(val('r_frete'))||0,fu=tot?fr/tot:0;
     $('modal').querySelectorAll('[data-csp]').forEach(s=>{const x=its.find(y=>y.pid===+s.dataset.csp);s.innerHTML=x?`→ <b>custo SP ${brl(x.c+fu,4)}</b>`:'';});
     const exc=its.filter(x=>x.q>x.max);
-    $('r_tot').innerHTML=tot?`<b>${un(tot)} unidades</b> em ${its.length} produto(s) · Frete ${brl(fr)} ÷ ${un(tot)} = <b>${brl(fu,4)} por unidade</b>${exc.length?'<div class="warn">Quantidade acima do disponível em '+exc.length+' produto(s).</div>':''}`:'Nenhum produto selecionado.';
+    $('r_tot').innerHTML=tot?`<b>${un(tot)} unidades</b> em ${its.length} produto(s)${verCusto()?` · Frete ${brl(fr)} ÷ ${un(tot)} = <b>${brl(fu,4)} por unidade</b>`:''}${exc.length?'<div class="warn">Quantidade acima do disponível em '+exc.length+' produto(s).</div>':''}`:'Nenhum produto selecionado.';
     return {its,exc};};
   $('modal').addEventListener('input',e=>{if(e.target.id==='r_busca'){const q=e.target.value.toLowerCase();$('modal').querySelectorAll('[data-lin]').forEach(l=>l.classList.toggle('hidden',!!q&&!l.dataset.nome.includes(q)));}else calc();});
   $('cx').onclick=fechar;
   $('ok').onclick=()=>{const {its,exc}=calc();const er=$('modal').querySelector('.erro');
     if(!its.length){er.textContent='Informe a quantidade de pelo menos um produto.';return;}
     if(exc.length){er.textContent='Há quantidades acima do disponível em Cuiabá.';return;}
-    const fr=val('r_frete')?dinheiro(val('r_frete')):0;if(isNaN(fr)){er.textContent='Valor do frete inválido.';return;}
+    const fr=!verCusto()?null:val('r_frete')?dinheiro(val('r_frete')):0;if(isNaN(fr)){er.textContent='Valor do frete inválido.';return;}
     rodar($('ok'),async()=>{const id=await rpc('criar_remessa',{p_data:val('r_data')||hoje(),p_cte:val('r_cte'),p_volumes:val('r_vol')?num(val('r_vol')):null,p_frete:fr,p_obs:val('r_obs'),p_itens:its.map(x=>({produto_id:x.pid,qtd:x.q}))});
-      toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();modalEtiquetas(id,true);});};
+      toast('Remessa #'+id+' criada.');filtroRem='rota';aba='remessas';await carregar();modalDetalhe(id);});};
 }
 
 function modalDetalhe(id){log('abriu','Remessa #'+id);
@@ -694,12 +719,23 @@ function modalDetalhe(id){log('abriu','Remessa #'+id);
   ${r.status==='recebida'?`<br>Chegou em SP ${fd(r.data_chegada)}${nomeDe(r.recebido_por)?' · confirmado por '+esc(nomeDe(r.recebido_por)):''}${r.obs_chegada?' · '+esc(r.obs_chegada):''}`:''}
   ${r.obs?'<br>Obs.: '+esc(r.obs):''}</div>
   ${c&&verCusto()?`<div class="total">Frete Carvalima <b>${brl(c.frete)}</b> ÷ ${un(env)} un. = <b>${brl(c.frete_unit,4)} por unidade</b></div>`:''}
-  ${linhas}<div class="erro"></div>
-  <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}${r.status!=='cancelada'&&podeCusto()?`<button id="etq">🏷 Imprimir etiquetas</button>`:''}
+  ${r.status!=='cancelada'&&podeCusto()&&(!c||!Number(c.frete))?`<div class="warn" style="display:flex;justify-content:space-between;align-items:center;gap:8px">Frete da Carvalima ainda não lançado.<button class="small primary" id="frt">Lançar frete</button></div>`:''}
+  ${etqHTML(r)}${linhas}<div class="erro"></div>
+  <div class="rodape">${r.status==='em_rota'&&podeCusto()?`<button class="danger" id="canc">Cancelar remessa</button>`:''}
   ${r.status==='em_rota'&&podeSP()?`<button class="primary" id="cheg">Confirmar chegada</button>`:''}<button id="cx">Fechar</button></div>`);
   $('cx').onclick=fechar;
   if($('cheg'))$('cheg').onclick=()=>modalChegada(r.id);
-  if($('etq'))$('etq').onclick=()=>modalEtiquetas(r.id,false);
+  if($('frt'))$('frt').onclick=()=>{abrir(`<h2>Frete da remessa #${r.id}</h2><div class="sub">O valor é dividido por unidade e somado ao custo de cada item que chega em SP.</div>
+    <div class="campo"><label>Frete Carvalima (R$)</label><input id="f_v" inputmode="decimal" placeholder="0,00"></div><div class="erro"></div>
+    <div class="rodape"><button id="cx">Voltar</button><button class="primary" id="ok">Salvar frete</button></div>`);
+    $('cx').onclick=()=>modalDetalhe(r.id);
+    $('ok').onclick=()=>{const v=dinheiro(val('f_v'));if(isNaN(v)||v<0){$('modal').querySelector('.erro').textContent='Valor do frete inválido.';return;}
+      rodar($('ok'),async()=>{await rpc('definir_frete',{p_remessa:r.id,p_frete:v});toast('Frete lançado.');await carregar();modalDetalhe(r.id);});};};
+  $('modal').querySelectorAll('[data-anx]').forEach(b=>b.onclick=()=>abrirAnexo(r,+b.dataset.anx));
+  if($('anx_add')){$('anx_add').onclick=()=>$('anx_arq').click();
+    $('anx_arq').onchange=()=>{const fs=[...$('anx_arq').files];if(!fs.length)return;const b=$('anx_add');b.textContent='Enviando…';
+      rodar(b,async()=>{try{for(const f of fs)await enviarAnexo(r.id,f);}catch(e){b.textContent='📎 Anexar etiqueta';$('anx_arq').value='';throw e;}
+        toast(fs.length>1?fs.length+' arquivos anexados.':'Etiqueta anexada.');await carregar();modalDetalhe(r.id);});};}
   if($('canc'))$('canc').onclick=()=>confirmar('Cancelar a remessa #'+r.id+'?','As quantidades voltam para o estoque de Cuiabá.','Cancelar remessa',async()=>{await rpc('cancelar_remessa',{p_remessa:r.id});toast('Remessa cancelada.');await carregar();});
   $('modal').querySelectorAll('[data-encam]').forEach(b=>b.onclick=()=>modalEncaminhar(+b.dataset.r,+b.dataset.encam));
   $('modal').querySelectorAll('[data-zoom]').forEach(b=>{if(b.dataset.zoom)b.onclick=()=>ampliar(b.dataset.zoom);});
