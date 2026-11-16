@@ -123,6 +123,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid #ffc38a}
 .login .sub{text-align:center}
 .toast{background:var(--ink);border-left:4px solid var(--pri)}
 @media (max-width:560px){.marca img{height:36px}.marca{font-size:16px}}
+/* ===== fotos dos produtos ===== */
+.pinfo{display:flex;gap:12px;align-items:center;min-width:0}
+.foto{width:56px;height:56px;border-radius:10px;object-fit:cover;flex:none;background:#fff1e0;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:22px;color:#e2a35c;overflow:hidden}
+.foto.p{width:40px;height:40px;font-size:17px;border-radius:8px}
+.foto img{width:100%;height:100%;object-fit:cover;display:block}
+.fotog{width:100%;max-height:360px;border-radius:12px;object-fit:contain;background:#fff8f1;border:1px solid var(--line);display:block}
+.fotovazia{width:100%;height:190px;border-radius:12px;border:2px dashed #f3c999;background:#fffdf9;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut);gap:6px;font-size:14px}
+.fotovazia .ic{font-size:40px}
+.semfoto{color:var(--amb);font-size:12px;font-weight:600}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.lb img{max-width:100%;max-height:100%;border-radius:8px}
+@media (max-width:560px){.foto{width:48px;height:48px}}
 </style>
 </head>
 <body>
@@ -155,6 +167,31 @@ function podeCusto(){return perfil&&['admin','cuiaba'].includes(perfil.papel);}
 function verCusto(){return perfil&&['admin','cuiaba','socio'].includes(perfil.papel);}
 function podeSP(){return perfil&&['admin','sp'].includes(perfil.papel);}
 function ehAdmin(){return perfil&&perfil.papel==='admin';}
+function podeFoto(){return perfil&&['admin','cuiaba','sp'].includes(perfil.papel);}
+function foto(p,peq){return `<div class="foto${peq?' p':''}">${p&&p.foto_url?`<img src="${esc(p.foto_url)}" alt="" loading="lazy">`:'📷'}</div>`;}
+async function reduzirImagem(file,max=1200){
+  if(!/^image\//.test(file.type))throw new Error('Escolha um arquivo de imagem (foto).');
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((ok,er)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>er(new Error('Não foi possível abrir esta imagem. Tente tirar a foto de novo.'));i.src=url;});
+    const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const w=Math.round(img.naturalWidth*k),h=Math.round(img.naturalHeight*k);
+    const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(img,0,0,w,h);
+    return await new Promise(ok=>c.toBlob(ok,'image/jpeg',0.82));}
+  finally{URL.revokeObjectURL(url);}
+}
+async function enviarFoto(pid,file){
+  const blob=await reduzirImagem(file);
+  const caminho='p'+pid+'/'+Date.now()+'.jpg';
+  const {error}=await sb.storage.from('produtos').upload(caminho,blob,{contentType:'image/jpeg',upsert:true,cacheControl:'31536000'});
+  if(error)throw error;
+  const url=sb.storage.from('produtos').getPublicUrl(caminho).data.publicUrl;
+  const antigo=(D.produtos.find(p=>p.id===pid)||{}).foto_url;
+  await rpc('definir_foto',{p_produto:pid,p_url:url});
+  apagarFotoAntiga(antigo);
+  const p=D.produtos.find(p=>p.id===pid);if(p)p.foto_url=url;
+  return url;
+}
+function apagarFotoAntiga(u){try{const m=String(u||'').match(/\/object\/public\/produtos\/(.+)$/);if(m)sb.storage.from('produtos').remove([decodeURIComponent(m[1])]).then(()=>{},()=>{});}catch(e){}}
+function ampliar(u){const d=document.createElement('div');d.className='lb';d.innerHTML=`<img src="${esc(u)}" alt="">`;d.onclick=()=>d.remove();document.body.appendChild(d);}
 function nomeDe(uid){const p=D.perfis.find(x=>x.user_id===uid);return p?(p.nome||p.email):'';}
 function produto(id){return D.produtos.find(p=>p.id===id)||{nome:'(produto)',sku:''};}
 function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesperado.';
@@ -163,8 +200,11 @@ function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesper
   if(/already registered/i.test(m))return 'Este e-mail já tem conta. Use "Entrar".';
   if(/Password should be/i.test(m))return 'A senha precisa ter pelo menos 6 caracteres.';
   if(/rate limit/i.test(m))return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+  if(/row-level security|Unauthorized|not allowed/i.test(m))return 'Seu acesso não permite esta ação.';
+  if(/exceeded the maximum allowed size|Payload too large/i.test(m))return 'A foto é grande demais. Tente outra.';
+  if(/Failed to fetch|NetworkError/i.test(m))return 'Sem conexão com a internet. Tente de novo.';
   return m;}
-const NOMES_ACAO={registrar_entrada:'Registrou entrada de mercadoria',criar_remessa:'Criou remessa para SP',cancelar_remessa:'Cancelou remessa',confirmar_chegada:'Confirmou chegada em SP',encaminhar:'Encaminhou mercadoria',desfazer_encaminhamento:'Desfez encaminhamento',salvar_nota:'Salvou nota fiscal',marcar_boleto:'Alterou boleto',excluir_nota:'Excluiu nota',definir_papel:'Alterou acesso de usuário',salvar_whatsapp:'Alterou configuração do WhatsApp',testar_whatsapp:'Testou WhatsApp',ativar_numero:'Ativou número WhatsApp',zerar_tudo:'Zerou o sistema'};
+const NOMES_ACAO={registrar_entrada:'Registrou entrada de mercadoria',criar_remessa:'Criou remessa para SP',cancelar_remessa:'Cancelou remessa',confirmar_chegada:'Confirmou chegada em SP',encaminhar:'Encaminhou mercadoria',desfazer_encaminhamento:'Desfez encaminhamento',salvar_nota:'Salvou nota fiscal',marcar_boleto:'Alterou boleto',excluir_nota:'Excluiu nota',definir_papel:'Alterou acesso de usuário',salvar_whatsapp:'Alterou configuração do WhatsApp',definir_foto:'Anexou/alterou foto de produto',testar_whatsapp:'Testou WhatsApp',ativar_numero:'Ativou número WhatsApp',zerar_tudo:'Zerou o sistema'};
 function log(ev,d){try{sb.rpc('registrar_acesso',{p_evento:ev,p_detalhe:d==null?null:String(d).slice(0,300)}).then(()=>{},()=>{});}catch(e){}}
 async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw error;log('acao',NOMES_ACAO[fn]||fn);return data;}
 
@@ -195,7 +235,7 @@ function telaLogin(msg){
     try{
       if(cad){const {data,error}=await sb.auth.signUp({email,password:$('l_senha').value,options:{data:{nome:val('l_nome')},emailRedirectTo:location.origin+location.pathname}});
         if(error)throw error;
-        if(!data.session){modoLogin='entrar';telaLogin();$('l_erro').style.color='#15803d';$('l_erro').textContent='Conta criada! Confirme pelo link enviado ao seu e-mail e depois entre.';return;}}
+        if(!data.session){modoLogin='entrar';telaLogin();$('l_erro').style.color='#15803d';$('l_erro').textContent='Conta criada! Agora entre com seu e-mail e senha.';return;}}
       else if(rec){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;
         $('l_erro').style.color='#15803d';$('l_erro').textContent='Pronto! Veja seu e-mail e clique no link.';b.disabled=false;return;}
       else{const {error}=await sb.auth.signInWithPassword({email,password:$('l_senha').value});if(error)throw error;}
@@ -242,7 +282,7 @@ async function carregar(){
   if(carregando)return;carregando=true;
   try{
     const sel='*, remessas_custo(frete,frete_unit), remessa_itens(id,produto_id,qtd_enviada,qtd_recebida, remessa_itens_custo(custo_medio_saida,frete_unit,custo_sp), encaminhamentos(id,qtd,destino,conta,envio,data,obs,criado_por,criado_em))';
-    const reqs=[sb.from('produtos').select('id,nome,sku,produtos_custo(qtd_cuiaba,custo_medio)').order('nome'),
+    const reqs=[sb.from('produtos').select('id,nome,sku,foto_url,produtos_custo(qtd_cuiaba,custo_medio)').order('nome'),
       sb.from('remessas').select(sel).order('id',{ascending:false}).limit(400),
       sb.from('perfis').select('*').order('nome')];
     if(verCusto()){reqs.push(sb.from('entradas').select('*').order('id',{ascending:false}).limit(2000));
@@ -293,9 +333,10 @@ function abaCuiaba(){
   return barraBusca('Buscar produto ou SKU…',podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button><button class="primary" data-act="remessa">+ Nova remessa</button>':'')+
   `<div class="resumo"><div class="kpi"><div class="n">${un(comEst.length)}</div><div class="l">Produtos em estoque</div></div>
    <div class="kpi"><div class="n">${un(tu)}</div><div class="l">Unidades em Cuiabá</div></div>
-   <div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div></div>
-  <div class="lista">${lst.length?lst.map(p=>`<div class="card" style="${p.c.qtd_cuiaba>0?'':'opacity:.55'}"><div><div class="t">${esc(p.nome)}</div>
-    <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku)+' · ':''}Custo médio <b>${brl(p.c.custo_medio,4)}</b></div></div>
+   <div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor a custo médio</div></div>
+   <div class="kpi"><div class="n">${un(comEst.filter(p=>!p.foto_url).length)}</div><div class="l">Produtos sem foto</div></div></div>
+  <div class="lista">${lst.length?lst.map(p=>`<div class="card click" data-prod="${p.id}" style="${p.c.qtd_cuiaba>0?'':'opacity:.55'}"><div class="pinfo">${foto(p)}<div><div class="t">${esc(p.nome)}</div>
+    <div class="meta">${p.sku?'SKU/EAN '+esc(p.sku)+' · ':''}Custo médio <b>${brl(p.c.custo_medio,4)}</b></div>${p.foto_url?'':'<div class="semfoto">Sem foto</div>'}</div></div>
     <div class="dir"><div class="n">${un(p.c.qtd_cuiaba)} un.</div><div class="meta">${brl(p.c.qtd_cuiaba*p.c.custo_medio)}</div></div></div>`).join('')
     :`<div class="vazio">${D.produtos.length?'Nada encontrado.':'Nenhum produto ainda. Toque em <b>+ Entrada</b> quando a mercadoria chegar na Tibiis.'}</div>`}</div>`;
 }
@@ -334,8 +375,8 @@ function abaSP(){
   return barraBusca('Buscar produto ou SKU…')+`<div class="resumo"><div class="kpi"><div class="n">${un(td)}</div><div class="l">Unidades no depósito SP</div></div>
    <div class="kpi"><div class="n">${un(tc)}</div><div class="l">Unidades a caminho</div></div>
    ${verCusto()?`<div class="kpi"><div class="n">${brl(tv)}</div><div class="l">Valor no depósito (custo SP)</div></div>`:''}</div>
-  <div class="lista">${lst.length?lst.map(x=>`<div class="card"><div><div class="t">${esc(x.p.nome)}</div>
-    <div class="meta">${x.p.sku?'SKU/EAN '+esc(x.p.sku):''}${x.cam?(x.p.sku?' · ':'')+'<b>'+un(x.cam)+'</b> un. a caminho':''}${verCusto()&&x.dep?' · Custo SP médio <b>'+brl(x.custoTot/x.dep,4)+'</b>':''}</div></div>
+  <div class="lista">${lst.length?lst.map(x=>`<div class="card click" data-prod="${x.pid}"><div class="pinfo">${foto(x.p)}<div><div class="t">${esc(x.p.nome)}</div>
+    <div class="meta">${x.p.sku?'SKU/EAN '+esc(x.p.sku):''}${x.cam?(x.p.sku?' · ':'')+'<b>'+un(x.cam)+'</b> un. a caminho':''}${verCusto()&&x.dep?' · Custo SP médio <b>'+brl(x.custoTot/x.dep,4)+'</b>':''}</div>${x.p.foto_url?'':'<div class="semfoto">Sem foto</div>'}</div></div>
     <div class="dir"><div class="n">${un(x.dep)} un.</div><div class="meta">no depósito</div></div></div>`).join('')
     :'<div class="vazio">Nenhuma mercadoria em SP ou a caminho.</div>'}</div>`;
 }
@@ -343,9 +384,9 @@ function abaSP(){
 function abaEntradas(){
   const lst=D.entradas.filter(e=>bate(produto(e.produto_id).nome,produto(e.produto_id).sku,e.nf));
   return barraBusca('Buscar produto, SKU ou NF…',podeCusto()?'<button class="primary" data-act="entrada">+ Entrada</button>':'')+
-  `<div class="lista">${lst.length?lst.map(e=>{const p=produto(e.produto_id);return `<div class="card"><div><div class="t">${esc(p.nome)}</div>
+  `<div class="lista">${lst.length?lst.map(e=>{const p=produto(e.produto_id);return `<div class="card click" data-prod="${e.produto_id}"><div class="pinfo">${foto(p,1)}<div><div class="t">${esc(p.nome)}</div>
     <div class="meta">${fd(e.data)}${e.nf?' · NF '+esc(e.nf):''} · Custo unit. <b>${brl(e.custo_unit,4)}</b> · Custo médio ${brl(e.custo_medio_antes,4)} → <b>${brl(e.custo_medio_depois,4)}</b></div>
-    <div class="meta">${nomeDe(e.criado_por)?'Lançado por '+esc(nomeDe(e.criado_por))+' · ':''}${fts(e.criado_em)}${e.obs?' · '+esc(e.obs):''}</div></div>
+    <div class="meta">${nomeDe(e.criado_por)?'Lançado por '+esc(nomeDe(e.criado_por))+' · ':''}${fts(e.criado_em)}${e.obs?' · '+esc(e.obs):''}</div></div></div>
     <div class="dir"><div class="n">+${un(e.qtd)} un.</div><div class="meta">${brl(e.qtd*e.custo_unit)}</div></div></div>`;}).join(''):'<div class="vazio">Nenhuma entrada registrada.</div>'}</div>`;
 }
 
@@ -436,7 +477,7 @@ function abaUsuarios(){
     <div><select data-papel="${p.user_id}" style="min-width:150px">
       <option value="">Sem acesso</option>${Object.entries(PAPEIS).map(([k,l])=>`<option value="${k}" ${p.papel===k?'selected':''}>${l}</option>`).join('')}
     </select></div></div>`).join('')}</div>
-  <div class="meta" style="margin-top:10px"><b>Administrador:</b> vê e faz tudo. <b>Cuiabá:</b> entradas, custo médio e remessas. <b>São Paulo:</b> vê as remessas e as quantidades, confirma a chegada e encaminha. Não vê custo, frete nem NF. <b>Sócio:</b> vê tudo, não altera nada.</div>`;
+  <div class="meta" style="margin-top:10px"><b>Administrador:</b> vê e faz tudo. <b>Cuiabá:</b> entradas, custo médio, remessas e fotos dos produtos. <b>São Paulo:</b> vê as remessas e as quantidades, confirma a chegada, encaminha e anexa fotos. Não vê custo, frete nem NF. <b>Sócio:</b> vê tudo, não altera nada.</div>`;
 }
 
 let filtroAc='';
@@ -488,11 +529,14 @@ function modalEntrada(){
   <div class="campo"><label>Nota fiscal</label><input id="e_nf"></div></div>
   <div class="duas"><div class="campo"><label>Data</label><input id="e_data" type="date" value="${hoje()}"></div>
   <div class="campo"><label>Observação</label><input id="e_obs"></div></div>
+  <div class="campo"><label>Foto do produto <span style="font-weight:400;color:var(--mut)">(opcional)</span></label>
+    <input id="e_foto" type="file" accept="image/*"><div class="meta" id="e_fotoinfo"></div></div>
   <div class="total" id="e_prev">Preencha quantidade e custo para ver o novo custo médio.</div>
   <div class="erro"></div>
   <div class="rodape"><button id="cx">Cancelar</button><button id="mais">Salvar e lançar outro</button><button class="primary" id="ok">Salvar entrada</button></div>`);
   const achar=()=>{const t=val('e_prod');return D.produtos.find(p=>(p.nome+(p.sku?' · '+p.sku:''))===t)||D.produtos.find(p=>p.nome.toLowerCase()===t.toLowerCase())||null;};
   const prev=()=>{const p=achar();$('c_sku').classList.toggle('hidden',!!p);
+    $('e_fotoinfo').textContent=p&&p.foto_url?'Este produto já tem foto. Se escolher outra, ela substitui a atual.':'';
     const q=num(val('e_qtd')),c=dinheiro(val('e_custo'));const el=$('e_prev');
     if(!q||isNaN(c)){el.textContent=p?'Produto existente: '+p.nome:'Preencha quantidade e custo para ver o novo custo médio.';return;}
     const pc=p?um(p.produtos_custo):null,q0=pc?pc.qtd_cuiaba:0,c0=pc?pc.custo_medio:0;
@@ -503,10 +547,41 @@ function modalEntrada(){
   const salvar=(cont,btn)=>{const p=achar(),q=num(val('e_qtd')),c=dinheiro(val('e_custo'));
     if(!val('e_prod')){$('modal').querySelector('.erro').textContent='Informe o produto.';return;}
     if(!q||isNaN(c)){$('modal').querySelector('.erro').textContent='Informe quantidade e custo unitário.';return;}
-    rodar(btn,async()=>{await rpc('registrar_entrada',{p_produto_id:p?p.id:null,p_nome:p?null:val('e_prod'),p_sku:p?null:val('e_sku'),p_qtd:q,p_custo:c,p_nf:val('e_nf'),p_data:val('e_data')||hoje(),p_obs:val('e_obs')});
-      toast('Entrada registrada.');await carregar();
+    const arq=$('e_foto').files[0],nome=val('e_prod'),sku=val('e_sku');
+    rodar(btn,async()=>{await rpc('registrar_entrada',{p_produto_id:p?p.id:null,p_nome:p?null:nome,p_sku:p?null:sku,p_qtd:q,p_custo:c,p_nf:val('e_nf'),p_data:val('e_data')||hoje(),p_obs:val('e_obs')});
+      await carregar();
+      if(arq){const alvo=p||D.produtos.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
+        try{if(alvo){await enviarFoto(alvo.id,arq);render();}toast(alvo?'Entrada registrada com foto.':'Entrada registrada. Anexe a foto abrindo o produto.');}
+        catch(e){toast('Entrada registrada, mas a foto não foi enviada: '+msgErro(e));}}
+      else toast('Entrada registrada.');
       if(cont){modalEntrada();}else fechar();});};
   $('ok').onclick=()=>salvar(false,$('ok'));$('mais').onclick=()=>salvar(true,$('mais'));
+}
+
+function modalProduto(pid){
+  const p=D.produtos.find(x=>x.id===pid);if(!p)return;log('abriu','Produto '+p.nome);
+  const c=um(p.produtos_custo);
+  let dep=0,cam=0;const rems=[];
+  D.remessas.forEach(r=>itensRem(r).forEach(i=>{if(i.produto_id!==pid)return;if(r.status==='em_rota')cam+=i.qtd_enviada;if(r.status==='recebida')dep+=i.disp;if(r.status!=='cancelada')rems.push({r,i});}));
+  const ents=D.entradas.filter(e=>e.produto_id===pid).slice(0,8);
+  abrir(`<h2>${esc(p.nome)}</h2><div class="sub">${p.sku?'SKU/EAN '+esc(p.sku):'Sem SKU cadastrado'}</div>
+  <div id="pf_area">${p.foto_url?`<img class="fotog" src="${esc(p.foto_url)}" alt="" id="pf_img" style="cursor:zoom-in">`:`<div class="fotovazia"><div class="ic">📷</div>Este produto ainda não tem foto.</div>`}</div>
+  ${podeFoto()?`<input id="pf_arq" type="file" accept="image/*" class="hidden">
+  <div class="rodape" style="justify-content:flex-start;margin-top:10px"><button class="primary" id="pf_tirar">${p.foto_url?'Trocar foto':'Anexar foto'}</button>${p.foto_url?'<button class="danger" id="pf_rem">Remover foto</button>':''}</div>
+  <div class="meta">No celular, você pode tirar a foto na hora ou escolher da galeria.</div>`:''}
+  <div class="resumo" style="margin-top:14px">${verCusto()&&c?`<div class="kpi"><div class="n">${un(c.qtd_cuiaba)}</div><div class="l">Em Cuiabá</div></div>`:''}
+   <div class="kpi"><div class="n">${un(cam)}</div><div class="l">A caminho de SP</div></div>
+   <div class="kpi"><div class="n">${un(dep)}</div><div class="l">No depósito SP</div></div>
+   ${verCusto()&&c?`<div class="kpi"><div class="n">${brl(c.custo_medio,2)}</div><div class="l">Custo médio</div></div>`:''}</div>
+  ${verCusto()&&ents.length?`<h3>Últimas entradas</h3><div class="scroll"><table class="planilha"><tr><th>Data</th><th>NF</th><th class="n">Qtd</th><th class="n">Custo unit.</th></tr>${ents.map(e=>`<tr><td>${fd(e.data)}</td><td>${esc(e.nf||'')}</td><td class="n">${un(e.qtd)}</td><td class="n">${brl(e.custo_unit,4)}</td></tr>`).join('')}</table></div>`:''}
+  ${rems.length?`<h3>Remessas</h3><div class="scroll"><table class="planilha"><tr><th>Remessa</th><th>Saída</th><th>Situação</th><th class="n">Enviado</th><th class="n">No depósito</th></tr>${rems.slice(0,10).map(({r,i})=>`<tr><td>#${r.id}</td><td>${fd(r.data_saida)}</td><td>${r.status==='em_rota'?'Em rota':'Chegou '+fd(r.data_chegada)}</td><td class="n">${un(i.qtd_enviada)}</td><td class="n">${un(i.disp)}</td></tr>`).join('')}</table></div>`:''}
+  <div class="erro"></div><div class="rodape"><button id="cx">Fechar</button></div>`);
+  $('cx').onclick=fechar;
+  if($('pf_img'))$('pf_img').onclick=()=>ampliar(p.foto_url);
+  if($('pf_tirar')){$('pf_tirar').onclick=()=>$('pf_arq').click();
+    $('pf_arq').onchange=()=>{const f=$('pf_arq').files[0];if(!f)return;const b=$('pf_tirar'),rot=b.textContent;b.textContent='Enviando foto…';
+      rodar(b,async()=>{try{await enviarFoto(pid,f);}catch(e){b.textContent=rot;$('pf_arq').value='';throw e;}toast('Foto salva.');render();modalProduto(pid);});};}
+  if($('pf_rem'))$('pf_rem').onclick=()=>rodar($('pf_rem'),async()=>{const ant=p.foto_url;await rpc('definir_foto',{p_produto:pid,p_url:''});apagarFotoAntiga(ant);p.foto_url=null;toast('Foto removida.');render();modalProduto(pid);});
 }
 
 function modalRemessa(){
@@ -518,8 +593,8 @@ function modalRemessa(){
   <div class="campo"><label>Volumes</label><input id="r_vol" inputmode="numeric"></div></div>
   <div class="duas"><div class="campo"><label>Frete Carvalima (R$)</label><input id="r_frete" inputmode="decimal" placeholder="0,00"></div>
   <div class="campo"><label>Buscar produto</label><input id="r_busca" type="search"></div></div>
-  <div class="tab rolar">${ps.map(p=>`<div class="lin" data-lin="${p.id}" data-nome="${esc((p.nome+' '+(p.sku||'')).toLowerCase())}"><div><div>${esc(p.nome)}</div>
-    <div class="meta">Disponível ${un(p.c.qtd_cuiaba)} · custo ${brl(p.c.custo_medio,4)} <span data-csp="${p.id}"></span></div></div>
+  <div class="tab rolar">${ps.map(p=>`<div class="lin" data-lin="${p.id}" data-nome="${esc((p.nome+' '+(p.sku||'')).toLowerCase())}"><div class="pinfo">${foto(p,1)}<div><div>${esc(p.nome)}</div>
+    <div class="meta">Disponível ${un(p.c.qtd_cuiaba)} · custo ${brl(p.c.custo_medio,4)} <span data-csp="${p.id}"></span></div></div></div>
     <input data-q="${p.id}" data-max="${p.c.qtd_cuiaba}" data-c="${p.c.custo_medio}" inputmode="numeric" placeholder="0"></div>`).join('')}</div>
   <div class="total" id="r_tot">Nenhum produto selecionado.</div>
   <div class="campo"><label>Observação</label><input id="r_obs"></div>
@@ -547,9 +622,9 @@ function modalDetalhe(id){log('abriu','Remessa #'+id);
   const linhas=it.map(i=>{const p=produto(i.produto_id);
     const custo=i.custo&&verCusto()?`<div class="meta">Custo Cuiabá ${brl(i.custo.custo_medio_saida,4)} + frete ${brl(i.custo.frete_unit,4)} = <b>custo SP ${brl(i.custo.custo_sp,4)}</b></div>`:'';
     const encs=(i.encaminhamentos||[]).slice().sort((a,b)=>a.id-b.id).map(e=>`<div class="enc"><span>→ <b>${un(e.qtd)}</b> un. ${esc(e.destino)}${e.conta?' ('+esc(e.conta)+')':''}${e.envio?' · envio '+esc(e.envio):''} · ${fd(e.data)}${nomeDe(e.criado_por)?' · '+esc(nomeDe(e.criado_por)):''}${e.obs?' · '+esc(e.obs):''}</span>${podeSP()?`<button class="small" data-desf="${e.id}" data-r="${r.id}">Desfazer</button>`:''}</div>`).join('');
-    return `<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(p.nome)}</b>${p.sku?' <span class="meta">'+esc(p.sku)+'</span>':''}
+    return `<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div class="pinfo" style="align-items:flex-start"><span data-zoom="${esc(p.foto_url||'')}" style="cursor:${p.foto_url?'zoom-in':'default'}">${foto(p,1)}</span><div><b>${esc(p.nome)}</b>${p.sku?' <span class="meta">'+esc(p.sku)+'</span>':''}
       <div class="meta">Enviado <b>${un(i.qtd_enviada)}</b>${r.status==='recebida'?` · Recebido <b>${un(i.qtd_recebida)}</b> · Encaminhado ${un(i.enc)} · <b>No depósito ${un(i.disp)}</b>`:''}</div>
-      ${r.status==='recebida'&&i.qtd_recebida!==i.qtd_enviada?`<div class="warn">⚠ Divergência: ${un(i.qtd_enviada-i.qtd_recebida)} un.</div>`:''}${custo}</div>
+      ${r.status==='recebida'&&i.qtd_recebida!==i.qtd_enviada?`<div class="warn">⚠ Divergência: ${un(i.qtd_enviada-i.qtd_recebida)} un.</div>`:''}${custo}</div></div>
       ${r.status==='recebida'&&i.disp>0&&podeSP()?`<button class="small primary" data-encam="${i.id}" data-r="${r.id}">Encaminhar</button>`:''}</div>${encs}</div>`;}).join('');
   const env=it.reduce((s,i)=>s+i.qtd_enviada,0);
   abrir(`<h2>Remessa #${r.id} ${badgeRem(r.status)}</h2>
@@ -564,13 +639,14 @@ function modalDetalhe(id){log('abriu','Remessa #'+id);
   if($('cheg'))$('cheg').onclick=()=>modalChegada(r.id);
   if($('canc'))$('canc').onclick=()=>confirmar('Cancelar a remessa #'+r.id+'?','As quantidades voltam para o estoque de Cuiabá.','Cancelar remessa',async()=>{await rpc('cancelar_remessa',{p_remessa:r.id});toast('Remessa cancelada.');await carregar();});
   $('modal').querySelectorAll('[data-encam]').forEach(b=>b.onclick=()=>modalEncaminhar(+b.dataset.r,+b.dataset.encam));
+  $('modal').querySelectorAll('[data-zoom]').forEach(b=>{if(b.dataset.zoom)b.onclick=()=>ampliar(b.dataset.zoom);});
   $('modal').querySelectorAll('[data-desf]').forEach(b=>b.onclick=()=>rodar(b,async()=>{await rpc('desfazer_encaminhamento',{p_id:+b.dataset.desf});toast('Encaminhamento desfeito.');await carregar();modalDetalhe(+b.dataset.r);}));
 }
 
 function modalChegada(rid){
   const r=D.remessas.find(x=>x.id===rid),it=itensRem(r);
   abrir(`<h2>Confirmar chegada — Remessa #${r.id}</h2><div class="sub">Confira quanto chegou de cada produto no depósito de SP. Se chegou tudo, é só confirmar.</div>
-  <div class="tab">${it.map(i=>`<div class="lin"><div>${esc(produto(i.produto_id).nome)}<div class="meta">Enviado ${un(i.qtd_enviada)}</div></div>
+  <div class="tab">${it.map(i=>`<div class="lin"><div class="pinfo">${foto(produto(i.produto_id),1)}<div>${esc(produto(i.produto_id).nome)}<div class="meta">Enviado ${un(i.qtd_enviada)}</div></div></div>
     <input data-rec="${i.id}" inputmode="numeric" value="${i.qtd_enviada}"></div>`).join('')}</div>
   <div class="duas"><div class="campo"><label>Data de chegada</label><input id="c_data" type="date" value="${hoje()}"></div>
   <div class="campo"><label>Observação (avarias, faltas…)</label><input id="c_obs"></div></div>
@@ -609,7 +685,8 @@ function confirmar(t,txt,btn,fn){
 
 // ---------- eventos ----------
 $('app').addEventListener('click',async e=>{
-  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol]');if(!t)return;
+  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod]');if(!t)return;
+  if(t.dataset.prod){modalProduto(+t.dataset.prod);return;}
   if(t.dataset.nota){modalNota(+t.dataset.nota);return;}
   if(t.dataset.bol){t.disabled=true;try{await rpc('marcar_boleto',{p_id:+t.dataset.bol,p_pago:t.dataset.pg==='1'});await carregar();}catch(err){toast(msgErro(err));t.disabled=false;}return;}
   if(t.dataset.aba){aba=t.dataset.aba;busca='';log('aba',t.textContent.trim());render();return;}
