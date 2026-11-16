@@ -194,7 +194,8 @@ async function enviarFoto(pid,file){
 }
 function apagarFotoAntiga(u){try{const m=String(u||'').match(/\/object\/public\/produtos\/(.+)$/);if(m)sb.storage.from('produtos').remove([decodeURIComponent(m[1])]).then(()=>{},()=>{});}catch(e){}}
 function ampliar(u){const d=document.createElement('div');d.className='lb';d.innerHTML=`<img src="${esc(u)}" alt="">`;d.onclick=()=>d.remove();document.body.appendChild(d);}
-function nomeDe(uid){const p=D.perfis.find(x=>x.user_id===uid);return p?(p.nome||p.email):'';}
+const NOME_OCULTO=['e16d7a8e-f1fd-473b-9da2-ffaeadf7137b']; // Bruno (SP): nome visível só para o administrador
+function nomeDe(uid){if(NOME_OCULTO.includes(uid)&&!ehAdmin()&&!(sessao&&sessao.user.id===uid))return '';const p=D.perfis.find(x=>x.user_id===uid);return p?(p.nome||p.email):'';}
 function produto(id){return D.produtos.find(p=>p.id===id)||{nome:'(produto)',sku:''};}
 function msgErro(e){const m=(e&&(e.message||e.error_description))||'Erro inesperado.';
   if(/Invalid login/i.test(m))return 'E-mail ou senha incorretos.';
@@ -294,7 +295,7 @@ async function carregar(){
     const pa=ehAdmin()?sb.from('acessos').select('*').order('id',{ascending:false}).limit(800):null;
     const r=await Promise.all(reqs);
     const e=r.find(x=>x.error);if(e)throw e.error;
-    D.produtos=r[0].data;D.remessas=r[1].data;D.perfis=r[2].data;D.entradas=r[3]?r[3].data:[];D.notas=r[4]?r[4].data:[];D.boletos=r[5]?r[5].data:[];
+    D.produtos=r[0].data;D.remessas=r[1].data;D.perfis=ehAdmin()?r[2].data:(r[2].data||[]).filter(p=>!NOME_OCULTO.includes(p.user_id)||p.user_id===sessao.user.id);D.entradas=r[3]?r[3].data:[];D.notas=r[4]?r[4].data:[];D.boletos=r[5]?r[5].data:[];
     if(pa){const x=await pa;D.acessos=x.data||[];}
   }catch(e){console.error(e);toast('Não foi possível atualizar os dados.');}
   carregando=false;render();
