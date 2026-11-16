@@ -138,6 +138,56 @@ input:focus,select:focus,textarea:focus{outline:2px solid #ffc38a}
 .lb{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
 .lb img{max-width:100%;max-height:100%;border-radius:8px}
 @media (max-width:560px){.foto{width:48px;height:48px}}
+/* ===== notas e boletos ===== */
+.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+button.kpi{text-align:left;font:inherit;cursor:pointer;padding:10px 12px;border-radius:12px;background:#fff}
+button.kpi:hover{box-shadow:0 4px 14px rgba(240,127,18,.15)}
+button.kpi.on{outline:2px solid var(--pri);outline-offset:-1px}
+.kpi .q{font-size:12px;color:var(--mut);margin-top:2px}
+.kpi .l{font-weight:600}
+.kpi.k-red{border-left-color:var(--red);background:#fff5f5}.kpi.k-red .n{color:var(--red)}
+.kpi.k-amb{border-left-color:#f59e0b;background:#fffbeb}.kpi.k-amb .n{color:#b45309}
+.kpi.k-zero{border-left-color:#d6d0c6}.kpi.k-zero .n{color:var(--mut)}
+.seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin:8px 0 6px}
+.seg button{border:0;border-radius:9px;padding:8px 16px;font-weight:600;background:none}
+.seg button.on{background:var(--ink);color:#fff}
+.seg button span{font-size:12px;background:rgba(0,0,0,.08);border-radius:99px;padding:1px 7px;margin-left:4px}
+.seg button.on span{background:rgba(255,255,255,.2)}
+.grupo{margin-bottom:14px}
+.gh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 2px;font-weight:700;font-size:15px;border-bottom:2px solid var(--pri);margin-bottom:6px}
+.gh .gs{font-weight:500;font-size:13px;color:var(--mut)}.gh .gs b{color:var(--ink);font-size:15px}
+.grupo.g-red .gh{color:var(--red);border-bottom-color:var(--red)}
+.bt{table-layout:auto}
+.bt td{vertical-align:middle;white-space:normal}
+.bt td small{display:block;color:var(--mut);font-size:12px;margin-top:2px;font-weight:400}
+.bt td.dt{width:120px;white-space:nowrap}
+.bt td.forn{width:auto}
+.nt .fn{max-width:250px}.nt th,.nt td{padding:8px 8px}
+.bt .fn{font-weight:600;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt td.val{font-weight:700;font-size:15px;white-space:nowrap}
+.bt td.n{white-space:nowrap}
+.bt td.acs{text-align:right;white-space:nowrap;width:1%}
+.bt tr.venc td{color:inherit;background:#fff5f5}.bt tr.venc td.dt b,.bt tr.venc td.dt small{color:var(--red)}
+.bt tr.pago td{color:var(--mut)}.bt tr.pago td.val{text-decoration:line-through;font-weight:500}
+.bt tr.cl{cursor:pointer}.bt tr.alerta td{background:#fffbeb}
+.bt .lk{color:var(--pri2);font-weight:600;cursor:pointer;text-decoration:underline}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:#f1ede6;color:#5f574c;white-space:nowrap}
+.pill.p-red{background:#fee2e2;color:var(--red)}.pill.p-amb{background:#fef3c7;color:#92400e}.pill.p-ok{background:#dcfce7;color:#15803d}
+.dv{color:#92400e!important}
+.semarq{color:#b45309;font-weight:600}
+button.ghost{background:#fff;color:var(--mut)}
+button.pg{background:#ecfdf3;border-color:#bbf7d0;color:#15803d;font-weight:600}button.pg:hover{background:#dcfce7}
+.totf{text-align:right;font-size:14px;color:var(--mut);padding:4px 2px 10px}.totf b{color:var(--ink);font-size:16px}
+@media (max-width:720px){
+ .bt,.bt tbody{display:block;border:0;background:none}
+ .bt tr.hd{display:none}
+ .bt tr{display:grid;grid-template-columns:1fr auto;gap:2px 10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+ .bt td{border:0;padding:0;width:auto!important}
+ .bt td.forn{grid-column:1/-1;order:-1}.bt .fn{max-width:100%;white-space:normal}
+ .bt td.val{text-align:right}
+ .bt td.acs{grid-column:1/-1;text-align:left;margin-top:6px}
+ .bt.nt td.n{text-align:left}
+}
 </style>
 </head>
 <body>
@@ -399,28 +449,65 @@ function abaEntradas(){
     <div class="dir"><div class="n">+${un(e.qtd)} un.</div><div class="meta">${brl(e.qtd*e.custo_unit)}</div></div></div>`;}).join(''):'<div class="vazio">Nenhuma entrada registrada.</div>'}</div>`;
 }
 
+let vistaNotas='boletos',filtroBol='aberto',filtroNF='todas';
+function nomeCurto(s){s=String(s||'').replace(/\s*[-–]\s*ME\b/i,'').replace(/\b(LTDA|EIRELI|S\/?A|ME|EPP)\.?\b/gi,'').replace(/\s{2,}/g,' ').trim();
+  return s.toLowerCase().replace(/(^|[\s(\/.-])([a-zà-ú])/g,(m,a,b)=>a+b.toUpperCase()).replace(/\b(E|De|Da|Do|Dos|Das|Para)\b/g,w=>w.toLowerCase());}
+function diasAte(d,h){return Math.round((new Date(d+'T12:00:00')-new Date(h+'T12:00:00'))/864e5);}
+function quando(b,h){if(b.pago)return b.pago_em?'pago em '+fd(b.pago_em):'pago';const n=diasAte(b.vencimento,h);
+  return n===0?'vence hoje':n===1?'vence amanhã':n>1?'em '+n+' dias':'venceu há '+(-n)+(n===-1?' dia':' dias');}
+function mesAno(d){const s=new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});return s[0].toUpperCase()+s.slice(1);}
 function abaNotas(){
-  const hoje_=hoje();const ab=D.boletos.filter(b=>!b.pago);
-  const venc=ab.filter(b=>b.vencimento<hoje_),prox=ab.filter(b=>b.vencimento>=hoje_&&b.vencimento<=addDias(hoje_,30));
+  const h=hoje();const ab=D.boletos.filter(b=>!b.pago);
   const soma=a=>a.reduce((s,b)=>s+ +b.valor,0);
-  const notas=D.notas.filter(n=>bate(n.numero,n.fornecedor));
+  const venc=ab.filter(b=>b.vencimento<h),em7=ab.filter(b=>b.vencimento>=h&&b.vencimento<=addDias(h,7)),em30=ab.filter(b=>b.vencimento>=h&&b.vencimento<=addDias(h,30));
   const nota=id=>D.notas.find(n=>n.id===id)||{};
-  const bols=D.boletos.filter(b=>bate(nota(b.nota_id).numero,nota(b.nota_id).fornecedor));
-  return barraBusca('Buscar nota ou fornecedor…','<button data-act="planilha">Baixar planilha</button>'+(podeCusto()?'<button data-act="novanota">+ Nota manual</button><button class="primary" data-act="entradanf">+ Entrada por NF (PDF ou XML)</button>':''))+
-  `<div class="resumo"><div class="kpi"><div class="n">${brl(soma(ab))}</div><div class="l">Total a pagar (${ab.length} boletos)</div></div>
-   <div class="kpi"><div class="n">${brl(soma(prox))}</div><div class="l">Vence em 30 dias</div></div>
-   <div class="kpi"><div class="n" style="color:${venc.length?'var(--red)':'inherit'}">${brl(soma(venc))}</div><div class="l">Vencidos</div></div></div>
-  <h3>Conferência das notas</h3>
-  ${notas.length?`<div class="scroll"><table class="planilha"><tr><th>Emissão</th><th>NF</th><th>Fornecedor</th><th class="n">Total nota</th><th class="n">Boletos</th><th class="n">Produtos lançados</th><th>Conferência</th><th>PDFs</th><th></th></tr>
-  ${notas.map(n=>{const c=conferencia(n);return `<tr><td>${fd(n.emissao)}</td><td>${esc(n.numero)}</td><td>${esc(n.fornecedor)}</td><td class="n">${brl(n.valor_total)}</td>
-    <td class="n">${brl(c.sb)} <small>(${c.bs.length}x)</small></td><td class="n">${brl(c.se)} <small>(${c.es.length} itens)</small></td>
-    <td>${c.okB&&c.okE?'<span class="ok">✓ Confere</span>':'<span class="warn">⚠ '+(!c.okB?'Boletos ≠ nota ':'')+(!c.okE?'Produtos ≠ nota':'')+'</span>'}</td>
-    <td>${anexosDe(n.id).length?`<button class="small" data-nota="${n.id}">📄 ${anexosDe(n.id).length}</button>`:''}${podeCusto()?` <button class="small" data-anxnota="${n.id}">📎 Anexar PDF</button>`:''}</td>
-    <td><button class="small" data-nota="${n.id}">Abrir</button></td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhuma nota cadastrada.</div>'}
-  <h3>Boletos</h3>
-  ${bols.length?`<div class="scroll"><table class="planilha"><tr><th>Vencimento</th><th>Fornecedor</th><th>NF</th><th>Parcela</th><th class="n">Valor</th><th>Situação</th><th>Boleto</th><th></th></tr>
-  ${bols.map(b=>{const n=nota(b.nota_id),v=!b.pago&&b.vencimento<hoje_;return `<tr class="${b.pago?'pago':v?'venc':''}"><td>${fd(b.vencimento)}</td><td>${esc(n.fornecedor||'')}</td><td>${esc(n.numero||'')}</td><td>${esc(b.parcela||'')}</td><td class="n">${brl(b.valor)}</td>
-    <td>${b.pago?'Pago '+fd(b.pago_em):v?'Vencido':'A vencer'}</td><td>${(D.anexosNota||[]).filter(a=>a.boleto_id===b.id).map(a=>`<button class="small" data-arqn="${a.id}">📄 Ver</button>`).join(' ')}${podeCusto()&&!(D.anexosNota||[]).some(a=>a.boleto_id===b.id)?`<button class="small" data-anxbol="${b.id}" data-anxbn="${b.nota_id}">📎 Anexar PDF</button>`:''}</td><td>${podeCusto()?`<button class="small" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'Marcar pago'}</button>`:''}</td></tr>`;}).join('')}</table></div>`:'<div class="vazio">Nenhum boleto.</div>'}`;
+  const confs=new Map(D.notas.map(n=>[n.id,conferencia(n)]));
+  const pend=D.notas.filter(n=>{const c=confs.get(n.id);return !(c.okB&&c.okE);});
+  const semPdf=D.notas.filter(n=>!anexosDe(n.id).length);
+  const kpi=(fb,cls,valor,qtd,rot)=>`<button class="kpi kb ${cls} ${vistaNotas==='boletos'&&filtroBol===fb?'on':''}" data-fb="${fb}"><div class="l">${rot}</div><div class="n">${brl(valor)}</div><div class="q">${qtd} boleto${qtd===1?'':'s'}</div></button>`;
+  let html=barraBusca('Buscar fornecedor, NF ou parcela…','<button data-act="planilha">Baixar planilha</button>'+(podeCusto()?'<button data-act="novanota">+ Nota manual</button><button class="primary" data-act="entradanf">+ Entrada por NF (PDF ou XML)</button>':''))+
+  `<div class="resumo kpis">${kpi('vencidos',venc.length?'k-red':'k-zero',soma(venc),venc.length,'Vencidos')}${kpi('7',em7.length?'k-amb':'k-zero',soma(em7),em7.length,'Vencem em 7 dias')}${kpi('30','',soma(em30),em30.length,'Vencem em 30 dias')}${kpi('aberto','',soma(ab),ab.length,'Total em aberto')}
+   <button class="kpi kb ${pend.length?'k-amb':'k-zero'} ${vistaNotas==='notas'&&filtroNF==='pend'?'on':''}" data-vn="notas" data-fn="pend"><div class="l">Notas com divergência</div><div class="n">${pend.length}</div><div class="q">de ${D.notas.length} notas</div></button></div>
+  <div class="seg"><button class="${vistaNotas==='boletos'?'on':''}" data-vn="boletos">Boletos a pagar <span>${ab.length}</span></button><button class="${vistaNotas==='notas'?'on':''}" data-vn="notas">Notas fiscais <span>${D.notas.length}</span></button></div>`;
+  if(vistaNotas==='boletos'){
+    const F={aberto:['Todos em aberto',b=>!b.pago],vencidos:['Vencidos',b=>!b.pago&&b.vencimento<h],'7':['Próximos 7 dias',b=>!b.pago&&b.vencimento>=h&&b.vencimento<=addDias(h,7)],'30':['Próximos 30 dias',b=>!b.pago&&b.vencimento>=h&&b.vencimento<=addDias(h,30)],
+      pagos:['Pagos',b=>b.pago],todos:['Todos',b=>true]};
+    if(!F[filtroBol])filtroBol='aberto';
+    let bols=D.boletos.filter(F[filtroBol][1]).filter(b=>{const n=nota(b.nota_id);return bate(n.numero,n.fornecedor,b.parcela,nomeCurto(n.fornecedor));});
+    bols.sort((a,b)=>filtroBol==='pagos'?String(b.pago_em||b.vencimento).localeCompare(String(a.pago_em||a.vencimento)):a.vencimento.localeCompare(b.vencimento));
+    const grupos=[];const add=(k,t,b)=>{let g=grupos.find(x=>x.k===k);if(!g)grupos.push(g={k,t,cls:k==='venc'?'g-red':'',l:[]});g.l.push(b);};
+    bols.forEach(b=>(!b.pago&&b.vencimento<h)?add('venc','Vencidos',b):add(b.vencimento.slice(0,7),mesAno(b.vencimento),b));
+    grupos.sort((a,b)=>a.k==='venc'?-1:b.k==='venc'?1:filtroBol==='pagos'?b.k.localeCompare(a.k):a.k.localeCompare(b.k));
+    const linha=b=>{const n=nota(b.nota_id),v=!b.pago&&b.vencimento<h,dd=diasAte(b.vencimento,h),perto=!b.pago&&dd>=0&&dd<=7;
+      const st=b.pago?'<span class="pill p-ok">Pago</span>':v?'<span class="pill p-red">Vencido</span>':perto?'<span class="pill p-amb">Vence logo</span>':'<span class="pill">A vencer</span>';
+      const arqs=(D.anexosNota||[]).filter(a=>a.boleto_id===b.id);
+      return `<tr class="${b.pago?'pago':v?'venc':''}"><td class="dt"><b>${fd(b.vencimento)}</b><small>${quando(b,h)}</small></td>
+        <td class="forn"><div class="fn" title="${esc(n.fornecedor||'')}">${esc(nomeCurto(n.fornecedor))}</div><small>NF <a class="lk" data-nota="${b.nota_id}">${esc(n.numero||'')}</a> · parcela ${esc(b.parcela||'—')}</small></td>
+        <td class="n val">${brl(b.valor)}</td><td>${st}</td>
+        <td class="acs">${arqs.map(a=>`<button class="small" data-arqn="${a.id}">📄 Boleto</button>`).join(' ')}${podeCusto()&&!arqs.length?`<button class="small ghost" data-anxbol="${b.id}" data-anxbn="${b.nota_id}" title="Sem PDF do boleto">📎 Anexar</button>`:''}
+        ${podeCusto()?`<button class="small ${b.pago?'ghost':'pg'}" data-bol="${b.id}" data-pg="${b.pago?0:1}">${b.pago?'Desfazer':'✓ Marcar pago'}</button>`:''}</td></tr>`;};
+    html+=`<div class="chips" style="margin:4px 0 10px">${['aberto','vencidos','7','30','pagos','todos'].map(k=>`<button class="${filtroBol===k?'on':''}" data-fb="${k}">${F[k][0]}</button>`).join('')}</div>`;
+    html+=grupos.length?grupos.map(g=>`<div class="grupo ${g.cls}"><div class="gh"><span>${g.t}</span><span class="gs">${g.l.length} boleto${g.l.length===1?'':'s'} · <b>${brl(soma(g.l))}</b></span></div>
+      <table class="planilha bt">${g.l.map(linha).join('')}</table></div>`).join('')+`<div class="totf">Total desta lista: <b>${brl(soma(bols))}</b> em ${bols.length} boleto${bols.length===1?'':'s'}</div>`
+      :`<div class="vazio">${filtroBol==='vencidos'?'Nenhum boleto vencido. 👍':'Nenhum boleto nesta lista.'}</div>`;
+  }else{
+    const F={todas:['Todas',n=>true],pend:['Com divergência ('+pend.length+')',n=>{const c=confs.get(n.id);return !(c.okB&&c.okE);}],sempdf:['Sem PDF da nota ('+semPdf.length+')',n=>!anexosDe(n.id).length]};
+    if(!F[filtroNF])filtroNF='todas';
+    const notas=D.notas.filter(F[filtroNF][1]).filter(n=>bate(n.numero,n.fornecedor,nomeCurto(n.fornecedor)));
+    html+=`<div class="chips" style="margin:4px 0 10px">${Object.entries(F).map(([k,[l]])=>`<button class="${filtroNF===k?'on':''}" data-fn="${k}">${l}</button>`).join('')}</div>`;
+    html+=notas.length?`<table class="planilha bt nt"><tr class="hd"><th>Emissão</th><th>Fornecedor / NF</th><th class="n">Valor da nota</th><th class="n">Boletos</th><th class="n">Produtos lançados</th><th>Conferência</th><th></th></tr>
+    ${notas.map(n=>{const c=confs.get(n.id),ok=c.okB&&c.okE,pagos=c.bs.filter(b=>b.pago).length,ax=anexosDe(n.id).length;
+      const dif=[];if(!c.okB)dif.push('Boletos '+brl(Math.abs(c.sb-n.valor_total))+(c.sb<n.valor_total?' abaixo':' acima')+' da nota');if(!c.okE)dif.push('Produtos '+brl(Math.abs(c.se-c.be))+(c.se<c.be?' abaixo':' acima'));
+      return `<tr class="cl ${ok?'':'alerta'}" data-nota="${n.id}"><td class="dt"><b>${fd(n.emissao)}</b></td>
+      <td class="forn"><div class="fn" title="${esc(n.fornecedor)}">${esc(nomeCurto(n.fornecedor))}</div><small>NF ${esc(n.numero)}${ax?' · 📄 '+ax+' arquivo'+(ax>1?'s':''):' · <span class="semarq">sem PDF</span>'}</small></td>
+      <td class="n val">${brl(n.valor_total)}</td>
+      <td class="n">${brl(c.sb)}<small>${c.bs.length}x${c.bs.length?' · '+pagos+' pago'+(pagos===1?'':'s'):''}</small></td>
+      <td class="n">${brl(c.se)}<small>${c.es.length} ite${c.es.length===1?'m':'ns'}</small></td>
+      <td>${ok?'<span class="pill p-ok">✓ Confere</span>':'<span class="pill p-amb">⚠ Divergência</span><small class="dv">'+dif.join('<br>')+'</small>'}</td>
+      <td class="acs">${podeCusto()?`<button class="small ghost" data-anxnota="${n.id}" title="Anexar PDF da nota">📎</button>`:''} <button class="small" data-nota="${n.id}">Abrir</button></td></tr>`;}).join('')}</table>`
+      :`<div class="vazio">${filtroNF==='pend'?'Todas as notas conferem. 👍':'Nenhuma nota encontrada.'}</div>`;
+  }
+  return html;
 }
 function addDias(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);}
 // ---------- entrada por nota fiscal (XML da NF-e) ----------
@@ -1102,7 +1189,8 @@ function confirmar(t,txt,btn,fn){
 
 // ---------- eventos ----------
 $('app').addEventListener('click',async e=>{
-  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn],[data-anxnota],[data-anxbol]');if(!t)return;
+  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn],[data-anxnota],[data-anxbol],[data-fb],[data-vn],[data-fn]');if(!t)return;
+  if(t.dataset.vn||t.dataset.fb||t.dataset.fn){if(t.dataset.vn)vistaNotas=t.dataset.vn;if(t.dataset.fb){filtroBol=t.dataset.fb;vistaNotas='boletos';}if(t.dataset.fn)filtroNF=t.dataset.fn;render();return;}
   if(t.dataset.prod){modalProduto(+t.dataset.prod);return;}
   if(t.dataset.arqn){abrirArqNota(+t.dataset.arqn);return;}
   if(t.dataset.anxnota){anexarRapido(+t.dataset.anxnota,'documento',null,true);return;}
