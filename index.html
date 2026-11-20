@@ -205,7 +205,8 @@ let sessao=null,perfil=null,aba=null,busca='',filtroRem='rota',D={produtos:[],re
 
 // ---------- utilidades ----------
 const $=id=>document.getElementById(id);
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function semOlist(t){return String(t??'').replace(/\s*\(olist\)/gi,'').replace(/olist\s*erp/gi,'ERP').replace(/olist/gi,'ERP');}
+function esc(s){return semOlist(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function hoje(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fd(s){if(!s)return '—';const p=String(s).slice(0,10).split('-');return `${p[2]}/${p[1]}/${p[0]}`;}
 function fts(s){return s?new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';}
@@ -215,7 +216,7 @@ function num(v){const n=parseInt(String(v??'').replace(/\D/g,''),10);return isNa
 function dinheiro(v){let s=String(v??'').trim().replace(/[R$\s]/g,'');if(!s)return NaN;if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');return parseFloat(s);}
 function um(x){return Array.isArray(x)?x[0]||null:x||null;}
 function val(id){const e=$(id);return e?e.value.trim():'';}
-function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.add('hidden'),3000);}
+function toast(m){const t=$('toast');t.textContent=semOlist(m);t.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.add('hidden'),3000);}
 function podeCusto(){return perfil&&['admin','cuiaba'].includes(perfil.papel);}
 function verCusto(){return perfil&&['admin','cuiaba','socio'].includes(perfil.papel);}
 function podeSP(){return perfil&&['admin','sp'].includes(perfil.papel);}
@@ -1215,10 +1216,10 @@ function abaML(){
       <div class="meta">${a.sku?'SKU '+esc(a.sku):'sem SKU'}${a.ean?' · EAN '+esc(a.ean):''}</div>
       <select data-mlvinc="${esc(a.item_id)}|${a.variacao_id}" style="margin-top:6px;max-width:100%"><option value="">— sem produto vinculado —</option>${opts}</select></div></div></div>`).join('')
       :'<div class="vazio">Nenhum anúncio. Toque em <b>Sincronizar anúncios</b>.</div>';}
-  const ol=D.mlOlist;const olTxt=`<div class="meta" style="margin:-4px 0 10px">Olist ERP: ${ol&&ol.ultima?'última leitura '+fts(ol.ultima)+(ol.resultado&&ol.resultado.erros&&ol.resultado.erros.length?' · <span class="warn">'+esc(ol.resultado.erros[0])+'</span>':''):'ainda não leu nenhum pedido'} · lê sozinho a cada 5 min</div>`;
+  const ol=D.mlOlist;const olTxt=`<div class="meta" style="margin:-4px 0 10px">ERP: ${ol&&ol.ultima?'última leitura '+fts(ol.ultima)+(ol.resultado&&ol.resultado.erros&&ol.resultado.erros.length?' · <span class="warn">'+esc(ol.resultado.erros[0])+'</span>':''):'ainda não leu nenhum pedido'} · lê sozinho a cada 5 min</div>`;
   const html=`<div class="total" style="margin-bottom:10px">Vendas <b>Flex/Agência</b> dão baixa automática no <b>Estoque SP</b> (remessa mais antiga primeiro) e voltam ao estoque se o pedido for cancelado. Vendas <b>Full</b> não mexem no estoque do sistema. O saldo do Estoque SP é enviado aos anúncios Flex/Agência vinculados.</div>
-  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_olist">Buscar pedidos da Olist agora</button><button data-act="ml_conectar">+ Conectar conta do ML (direto)</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>${olTxt}
-  <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.id<0?'<span class="badge b-rec">Via Olist</span>':c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
+  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_olist">Buscar pedidos do ERP agora</button><button data-act="ml_conectar">+ Conectar conta do ML (direto)</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>${olTxt}
+  <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.id<0?'<span class="badge b-rec">Via ERP</span>':c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
     <div class="meta">Conectada em ${fts(c.conectado_em)}${c.ultima_sync?' · anúncios lidos em '+fts(c.ultima_sync):''}</div></div>${c.ativo&&c.id>0?`<div class="dir"><button class="small" data-mldesc="${c.id}">Desconectar</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhuma conta conectada ainda.</div>'}</div>
   <div class="resumo"><div class="kpi"><div class="n">${un(an.length)}</div><div class="l">Anúncios</div></div><div class="kpi"><div class="n">${un(semV.length)}</div><div class="l">Sem produto vinculado</div></div>
    <div class="kpi"><div class="n">${un(ped.filter(p=>p.situacao==='baixado').length)}</div><div class="l">Pedidos baixados</div></div><div class="kpi"><div class="n">${un(prob.length)}</div><div class="l">Pedidos com pendência</div></div></div>
@@ -1253,7 +1254,7 @@ $('app').addEventListener('click',async e=>{
       if(a==='ml_conectar'){location.href=r.url;return;}
       if(a==='ml_sincronizar')toast('Anúncios: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.anuncios+' lidos, '+x.vinculados+' vinculados')).join(' | '));
       if(a==='ml_pedidos')toast('Pedidos: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.pedidos+' conferidos')).join(' | '));
-      if(a==='ml_olist')toast('Olist: '+r.pedidos+' pedido(s) lido(s)'+(r.baixado?' · '+r.baixado+' baixado(s)':'')+(r.erros&&r.erros.length?' · erro: '+r.erros[0]:''));
+      if(a==='ml_olist')toast('ERP: '+r.pedidos+' pedido(s) lido(s)'+(r.baixado?' · '+r.baixado+' baixado(s)':'')+(r.erros&&r.erros.length?' · erro: '+r.erros[0]:''));
       if(a==='ml_enviar_estoque')toast(r.atualizados+' anúncio(s) atualizado(s)'+(r.erros.length?' · '+r.erros.length+' erro(s): '+r.erros[0]:''));
       await carregar();}catch(err){toast(msgErro(err));}
     t.disabled=false;t.textContent=txt;return;}
