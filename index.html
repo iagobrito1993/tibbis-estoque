@@ -352,6 +352,7 @@ async function carregar(){
     const e=r.find(x=>x.error);if(e)throw e.error;
     D.produtos=r[0].data;D.remessas=r[1].data;D.perfis=ehAdmin()?r[2].data:(r[2].data||[]).filter(p=>!NOME_OCULTO.includes(p.user_id)||p.user_id===sessao.user.id);D.entradas=r[3]?r[3].data:[];D.notas=r[4]?r[4].data:[];D.boletos=r[5]?r[5].data:[];D.anexosNota=r[6]?r[6].data:[];D.vinculos=r[7]?r[7].data:[];
     if(pa){const x=await pa;D.acessos=x.data||[];}
+    if(ehAdmin())await carregarML();
   }catch(e){console.error(e);toast('Não foi possível atualizar os dados.');}
   carregando=false;render();
 }
@@ -367,13 +368,13 @@ function abasDoPapel(){
   if(verEstoqueCuiaba())a.push(['cuiaba','Estoque Cuiabá']);
   a.push(['remessas','Remessas']);a.push(['sp','Estoque SP']);
   if(verCusto()){a.push(['entradas','Entradas']);a.push(['notas','Notas e boletos']);}
-  if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['acessos','Acessos']);a.push(['whatsapp','WhatsApp']);}
+  if(ehAdmin()){a.push(['usuarios','Usuários']);a.push(['acessos','Acessos']);a.push(['whatsapp','WhatsApp']);a.push(['ml','Mercado Livre']);}
   return a;
 }
 function render(){
   if(!perfil||!perfil.papel)return;
   const abas=abasDoPapel();if(!abas.find(x=>x[0]===aba))aba=abas[0][0];
-  const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,notas:abaNotas,usuarios:abaUsuarios,acessos:abaAcessos,whatsapp:abaWhats}[aba]();
+  const conteudo={cuiaba:abaCuiaba,remessas:abaRemessas,sp:abaSP,entradas:abaEntradas,notas:abaNotas,usuarios:abaUsuarios,acessos:abaAcessos,whatsapp:abaWhats,ml:abaML}[aba]();
   const ativo=document.activeElement&&document.activeElement.id==='busca';const pos=ativo?document.activeElement.selectionStart:0;
   $('app').innerHTML=`<div class="topo"><div class="wrap"><div class="marca"><img src="tibiismania-logo.jpg" alt="Tibii's"><div>Tibiis Estoque<small>Cuiabá → Carvalima → SP → Full</small></div></div>
     <div class="quem"><span>${esc(perfil.nome||perfil.email)}</span><span class="badge b-pap">${PAPEIS[perfil.papel]}</span>
@@ -1187,9 +1188,51 @@ function confirmar(t,txt,btn,fn){
   $('cx').onclick=fechar;$('ok').onclick=()=>rodar($('ok'),async()=>{await fn();fechar();});
 }
 
+// ---------- Mercado Livre ----------
+let filtroML='pedidos';
+const SIT_ML={baixado:'Baixado do estoque SP',devolvido:'Devolvido ao estoque',full:'Full (não mexe no estoque)',sem_vinculo:'Anúncio sem produto vinculado',sem_estoque:'Sem saldo no estoque SP',pendente:'Aguardando pagamento',cancelado:'Cancelado'};
+const LOG_ML={fulfillment:'Full',self_service:'Flex',cross_docking:'Coleta',xd_drop_off:'Agência',drop_off:'Agência'};
+async function mlChamar(body){const {data:{session}}=await sb.auth.getSession();
+  const r=await fetch(SUPABASE_URL+'/functions/v1/ml',{method:'POST',headers:{'content-type':'application/json',apikey:SUPABASE_KEY,authorization:'Bearer '+session.access_token},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({error:'Servidor do ML indisponível.'}));if(!r.ok||j.error)throw new Error(j.error||('Erro '+r.status));return j;}
+async function carregarML(){const r=await Promise.all([sb.from('ml_contas').select('id,apelido,ativo,conectado_em,ultima_sync').order('conectado_em'),
+  sb.from('ml_anuncios').select('*').order('titulo').limit(5000),sb.from('ml_pedidos').select('*').order('data',{ascending:false}).limit(300)]);
+  D.mlContas=r[0].data||[];D.mlAnuncios=r[1].data||[];D.mlPedidos=r[2].data||[];}
+function abaML(){
+  const contas=D.mlContas||[],an=D.mlAnuncios||[],ped=D.mlPedidos||[];
+  const nomeConta=id=>{const c=contas.find(x=>x.id===id);return c?(c.apelido||c.id):id;};
+  const semV=an.filter(a=>!a.produto_id&&a.status!=='closed'),prob=ped.filter(p=>['sem_vinculo','sem_estoque'].includes(p.situacao));
+  let corpo='';
+  if(filtroML==='pedidos'){const l=ped.filter(p=>bate(p.id,p.comprador,nomeConta(p.conta_id),...(p.itens||[]).map(i=>i.titulo)));
+    corpo=l.length?l.map(p=>`<div class="card"><div><div class="t">Pedido ${p.id} <span class="badge ${p.situacao==='baixado'?'b-rec':['sem_vinculo','sem_estoque'].includes(p.situacao)?'b-rota':'b-can'}">${esc(SIT_ML[p.situacao]||p.situacao)}</span></div>
+      <div class="meta">${fts(p.data)} · ${esc(nomeConta(p.conta_id))} · ${esc(LOG_ML[p.logistica]||p.logistica||'—')}${p.comprador?' · '+esc(p.comprador):''} · ${brl(p.total)}</div>
+      ${(p.itens||[]).map(i=>`<div class="meta">${un(i.qtd)}× ${esc(i.titulo)}</div>`).join('')}${p.detalhe?`<div class="warn">${esc(p.detalhe)}</div>`:''}</div>
+      ${['sem_vinculo','sem_estoque'].includes(p.situacao)?`<div class="dir"><button class="small" data-mlrep="${p.id}">Tentar baixa de novo</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhum pedido ainda. Toque em <b>Buscar pedidos</b>.</div>';}
+  else{const l=an.filter(a=>(filtroML==='semvinc'?!a.produto_id&&a.status!=='closed':true)&&bate(a.titulo,a.sku,a.ean,a.item_id));
+    const opts=D.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)}${p.sku?' · '+esc(p.sku):''}</option>`).join('');
+    corpo=l.length?l.slice(0,400).map(a=>`<div class="card"><div class="pinfo">${a.foto?`<div class="foto p"><img src="${esc(a.foto)}" alt="" loading="lazy"></div>`:''}<div><div class="t"><a href="${esc(a.permalink||'#')}" target="_blank" rel="noopener">${esc(a.titulo)}</a></div>
+      <div class="meta">${esc(a.item_id)}${a.variacao_id?' · variação '+a.variacao_id:''} · ${esc(nomeConta(a.conta_id))} · ${esc(LOG_ML[a.logistica]||a.logistica||'—')} · ${esc(a.status||'')} · estoque no ML ${un(a.estoque_ml)}</div>
+      <div class="meta">${a.sku?'SKU '+esc(a.sku):'sem SKU'}${a.ean?' · EAN '+esc(a.ean):''}</div>
+      <select data-mlvinc="${esc(a.item_id)}|${a.variacao_id}" style="margin-top:6px;max-width:100%"><option value="">— sem produto vinculado —</option>${opts}</select></div></div></div>`).join('')
+      :'<div class="vazio">Nenhum anúncio. Toque em <b>Sincronizar anúncios</b>.</div>';}
+  const html=`<div class="total" style="margin-bottom:10px">Vendas <b>Flex/Agência</b> dão baixa automática no <b>Estoque SP</b> (remessa mais antiga primeiro) e voltam ao estoque se o pedido for cancelado. Vendas <b>Full</b> não mexem no estoque do sistema. O saldo do Estoque SP é enviado aos anúncios Flex/Agência vinculados.</div>
+  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_conectar">+ Conectar conta do ML</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>
+  <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
+    <div class="meta">Conectada em ${fts(c.conectado_em)}${c.ultima_sync?' · anúncios lidos em '+fts(c.ultima_sync):''}</div></div>${c.ativo?`<div class="dir"><button class="small" data-mldesc="${c.id}">Desconectar</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhuma conta conectada ainda.</div>'}</div>
+  <div class="resumo"><div class="kpi"><div class="n">${un(an.length)}</div><div class="l">Anúncios</div></div><div class="kpi"><div class="n">${un(semV.length)}</div><div class="l">Sem produto vinculado</div></div>
+   <div class="kpi"><div class="n">${un(ped.filter(p=>p.situacao==='baixado').length)}</div><div class="l">Pedidos baixados</div></div><div class="kpi"><div class="n">${un(prob.length)}</div><div class="l">Pedidos com pendência</div></div></div>
+  ${barraBusca('Buscar pedido, anúncio, SKU…')}
+  <div class="chips" style="margin-bottom:10px">${[['pedidos','Pedidos'],['semvinc','Anúncios sem vínculo ('+semV.length+')'],['anuncios','Todos os anúncios']].map(([k,l])=>`<button class="${filtroML===k?'on':''}" data-mlf="${k}">${l}</button>`).join('')}</div>
+  <div class="lista">${corpo}</div>`;
+  setTimeout(()=>document.querySelectorAll('[data-mlvinc]').forEach(s=>{const [it,va]=s.dataset.mlvinc.split('|');const a=an.find(x=>x.item_id===it&&String(x.variacao_id)===va);if(a&&a.produto_id)s.value=a.produto_id;}),0);
+  return html;
+}
+(function(){const q=new URLSearchParams(location.search);if(q.get('ml')){const ok=q.get('ml')==='ok';history.replaceState(null,'',location.pathname);aba='ml';
+  setTimeout(()=>toast(ok?'Conta '+(q.get('conta')||'')+' conectada ao Tibiis Estoque.':'Não conectou: '+(q.get('msg')||'tente de novo.')),1500);}})();
+
 // ---------- eventos ----------
 $('app').addEventListener('click',async e=>{
-  const t=e.target.closest('[data-aba],[data-act],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn],[data-anxnota],[data-anxbol],[data-fb],[data-vn],[data-fn]');if(!t)return;
+  const t=e.target.closest('[data-aba],[data-act],[data-mlf],[data-mlrep],[data-mldesc],[data-fr],[data-rem],[data-nota],[data-bol],[data-prod],[data-arqn],[data-anxnota],[data-anxbol],[data-fb],[data-vn],[data-fn]');if(!t)return;
   if(t.dataset.vn||t.dataset.fb||t.dataset.fn){if(t.dataset.vn)vistaNotas=t.dataset.vn;if(t.dataset.fb){filtroBol=t.dataset.fb;vistaNotas='boletos';}if(t.dataset.fn)filtroNF=t.dataset.fn;render();return;}
   if(t.dataset.prod){modalProduto(+t.dataset.prod);return;}
   if(t.dataset.arqn){abrirArqNota(+t.dataset.arqn);return;}
@@ -1200,7 +1243,18 @@ $('app').addEventListener('click',async e=>{
   if(t.dataset.aba){aba=t.dataset.aba;busca='';log('aba',t.textContent.trim());render();return;}
   if(t.dataset.fr){filtroRem=t.dataset.fr;render();return;}
   if(t.dataset.rem){modalDetalhe(+t.dataset.rem);return;}
+  if(t.dataset.mlf){filtroML=t.dataset.mlf;render();return;}
+  if(t.dataset.mlrep){t.disabled=true;try{const r=await rpc('ml_reprocessar',{p_pedido:+t.dataset.mlrep});toast(r==='baixado'?'Baixa feita.':'Ainda não deu: '+(SIT_ML[r]||r));await carregar();}catch(err){toast(msgErro(err));t.disabled=false;}return;}
+  if(t.dataset.mldesc){confirmar('Desconectar conta','A conta para de dar baixa automática no estoque. Dá para conectar de novo depois.','Desconectar',async()=>{await rpc('ml_desconectar',{p_conta:+t.dataset.mldesc});await carregar();});return;}
   const a=t.dataset.act;
+  if(a&&a.startsWith('ml_')){t.disabled=true;const txt=t.textContent;t.textContent='Aguarde…';
+    try{const r=await mlChamar({acao:a.slice(3)});
+      if(a==='ml_conectar'){location.href=r.url;return;}
+      if(a==='ml_sincronizar')toast('Anúncios: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.anuncios+' lidos, '+x.vinculados+' vinculados')).join(' | '));
+      if(a==='ml_pedidos')toast('Pedidos: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.pedidos+' conferidos')).join(' | '));
+      if(a==='ml_enviar_estoque')toast(r.atualizados+' anúncio(s) atualizado(s)'+(r.erros.length?' · '+r.erros.length+' erro(s): '+r.erros[0]:''));
+      await carregar();}catch(err){toast(msgErro(err));}
+    t.disabled=false;t.textContent=txt;return;}
   if(a==='sair')sb.auth.signOut();
   if(a==='atualizar'){await carregar();toast('Atualizado.');}
   if(a==='entrada')modalEntrada();
@@ -1213,7 +1267,8 @@ $('app').addEventListener('click',async e=>{
   if(a==='testewhats'){t.disabled=true;try{await rpc('testar_whatsapp');toast('Teste enviado. Confira os celulares.');setTimeout(carregarWhats,4000);}catch(err){toast(msgErro(err));}t.disabled=false;}
 });
 $('app').addEventListener('input',e=>{if(e.target.id==='busca'){busca=e.target.value;render();}});
-$('app').addEventListener('change',async e=>{if(e.target.id==='filtroAc'){filtroAc=e.target.value;render();return;}const s=e.target.closest('[data-papel]');if(!s)return;
+$('app').addEventListener('change',async e=>{if(e.target.id==='filtroAc'){filtroAc=e.target.value;render();return;}
+  const v=e.target.closest('[data-mlvinc]');if(v){const [it,va]=v.dataset.mlvinc.split('|');try{await rpc('ml_vincular',{p_item:it,p_var:+va,p_produto:v.value?+v.value:null});toast('Vínculo salvo.');await carregar();}catch(err){toast(msgErro(err));}return;}const s=e.target.closest('[data-papel]');if(!s)return;
   try{await rpc('definir_papel',{p_user:s.dataset.papel,p_papel:s.value||null});toast('Acesso atualizado.');await carregar();}
   catch(err){toast(msgErro(err));await carregar();}});
 
