@@ -184,6 +184,7 @@ async function olist(metodo: string, params: Record<string, string>) {
 const dataBR = (d: Date) => { const z = (n: number) => String(n).padStart(2, "0"); const b = new Date(d.getTime() - 3 * 3600e3);
   return `${z(b.getUTCDate())}/${z(b.getUTCMonth() + 1)}/${b.getUTCFullYear()} ${z(b.getUTCHours())}:${z(b.getUTCMinutes())}:${z(b.getUTCSeconds())}`; };
 function contaOlist(nome: string) { let h = 0; for (const c of nome) h = (h * 31 + c.charCodeAt(0)) | 0; return -Math.abs(h || 1); }
+const CORTE_PEDIDOS = Deno.env.get("OLIST_CORTE") || "2026-11-20";
 async function olistSync(desdeHoras: number | null) {
   const { data: est } = await sb.from("ml_olist_estado").select("*").eq("id", 1).maybeSingle();
   const inicio = new Date();
@@ -196,6 +197,9 @@ async function olistSync(desdeHoras: number | null) {
   while (pagina <= 20) {
     const r = await olist("pedidos.pesquisa.php", { dataAtualizacao: dataBR(desde), pagina: String(pagina) });
     for (const x of r.pedidos || []) {
+      // Histórico importado no ERP não mexe no estoque: só pedidos a partir de 20/11/2026
+      const dp = String(x.pedido?.data_pedido || "").split("/");
+      if (dp.length === 3 && `${dp[2]}-${dp[1]}-${dp[0]}` < CORTE_PEDIDOS) continue;
       try {
         const o = (await olist("pedido.obter.php", { id: String(x.pedido.id) })).pedido;
         const canal = String(o.ecommerce?.nomeEcommerce || "");
