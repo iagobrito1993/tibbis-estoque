@@ -1200,7 +1200,7 @@ async function carregarML(){const r=await Promise.all([sb.from('ml_contas').sele
   sb.from('ml_anuncios').select('*').order('titulo').limit(5000),sb.from('ml_pedidos').select('*').order('data',{ascending:false}).limit(300),sb.from('ml_olist_estado').select('*').eq('id',1).maybeSingle()]);
   D.mlContas=r[0].data||[];D.mlAnuncios=r[1].data||[];D.mlPedidos=r[2].data||[];D.mlOlist=r[3].data||null;}
 function abaML(){
-  const contas=D.mlContas||[],an=D.mlAnuncios||[],ped=D.mlPedidos||[];
+  const contas=(D.mlContas||[]).filter(c=>c.id>=0),an=D.mlAnuncios||[],ped=D.mlPedidos||[];
   const nomeConta=id=>{const c=contas.find(x=>x.id===id);return c?(c.apelido||c.id):id;};
   const semV=an.filter(a=>!a.produto_id&&a.status!=='closed'),prob=ped.filter(p=>['sem_vinculo','sem_estoque'].includes(p.situacao));
   let corpo='';
@@ -1218,7 +1218,7 @@ function abaML(){
       :'<div class="vazio">Nenhum anúncio. Toque em <b>Sincronizar anúncios</b>.</div>';}
   const ol=D.mlOlist;const olTxt=`<div class="meta" style="margin:-4px 0 10px">ERP: ${ol&&ol.ultima?'última leitura '+fts(ol.ultima)+(ol.resultado&&ol.resultado.erros&&ol.resultado.erros.length?' · <span class="warn">'+esc(ol.resultado.erros[0])+'</span>':''):'ainda não leu nenhum pedido'} · lê sozinho a cada 5 min</div>`;
   const html=`<div class="total" style="margin-bottom:10px">Vendas <b>Flex/Agência</b> dão baixa automática no <b>Estoque SP</b> (remessa mais antiga primeiro) e voltam ao estoque se o pedido for cancelado. Vendas <b>Full</b> não mexem no estoque do sistema. O saldo do Estoque SP é enviado aos anúncios Flex/Agência vinculados.</div>
-  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_olist">Buscar pedidos do ERP agora</button><button data-act="ml_conectar">+ Conectar conta do ML (direto)</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>${olTxt}
+  <div class="barra" style="flex-wrap:wrap"><button data-act="ml_conectar">+ Conectar conta do ML (direto)</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>
   <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.id<0?'<span class="badge b-rec">Via ERP</span>':c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
     <div class="meta">Conectada em ${fts(c.conectado_em)}${c.ultima_sync?' · anúncios lidos em '+fts(c.ultima_sync):''}</div></div>${c.ativo&&c.id>0?`<div class="dir"><button class="small" data-mldesc="${c.id}">Desconectar</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhuma conta conectada ainda.</div>'}</div>
   <div class="resumo"><div class="kpi"><div class="n">${un(an.length)}</div><div class="l">Anúncios</div></div><div class="kpi"><div class="n">${un(semV.length)}</div><div class="l">Sem produto vinculado</div></div>
