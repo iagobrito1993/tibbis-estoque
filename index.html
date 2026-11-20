@@ -1196,8 +1196,8 @@ async function mlChamar(body){const {data:{session}}=await sb.auth.getSession();
   const r=await fetch(SUPABASE_URL+'/functions/v1/ml',{method:'POST',headers:{'content-type':'application/json',apikey:SUPABASE_KEY,authorization:'Bearer '+session.access_token},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({error:'Servidor do ML indisponível.'}));if(!r.ok||j.error)throw new Error(j.error||('Erro '+r.status));return j;}
 async function carregarML(){const r=await Promise.all([sb.from('ml_contas').select('id,apelido,ativo,conectado_em,ultima_sync').order('conectado_em'),
-  sb.from('ml_anuncios').select('*').order('titulo').limit(5000),sb.from('ml_pedidos').select('*').order('data',{ascending:false}).limit(300)]);
-  D.mlContas=r[0].data||[];D.mlAnuncios=r[1].data||[];D.mlPedidos=r[2].data||[];}
+  sb.from('ml_anuncios').select('*').order('titulo').limit(5000),sb.from('ml_pedidos').select('*').order('data',{ascending:false}).limit(300),sb.from('ml_olist_estado').select('*').eq('id',1).maybeSingle()]);
+  D.mlContas=r[0].data||[];D.mlAnuncios=r[1].data||[];D.mlPedidos=r[2].data||[];D.mlOlist=r[3].data||null;}
 function abaML(){
   const contas=D.mlContas||[],an=D.mlAnuncios||[],ped=D.mlPedidos||[];
   const nomeConta=id=>{const c=contas.find(x=>x.id===id);return c?(c.apelido||c.id):id;};
@@ -1215,10 +1215,11 @@ function abaML(){
       <div class="meta">${a.sku?'SKU '+esc(a.sku):'sem SKU'}${a.ean?' · EAN '+esc(a.ean):''}</div>
       <select data-mlvinc="${esc(a.item_id)}|${a.variacao_id}" style="margin-top:6px;max-width:100%"><option value="">— sem produto vinculado —</option>${opts}</select></div></div></div>`).join('')
       :'<div class="vazio">Nenhum anúncio. Toque em <b>Sincronizar anúncios</b>.</div>';}
+  const ol=D.mlOlist;const olTxt=`<div class="meta" style="margin:-4px 0 10px">Olist ERP: ${ol&&ol.ultima?'última leitura '+fts(ol.ultima)+(ol.resultado&&ol.resultado.erros&&ol.resultado.erros.length?' · <span class="warn">'+esc(ol.resultado.erros[0])+'</span>':''):'ainda não leu nenhum pedido'} · lê sozinho a cada 5 min</div>`;
   const html=`<div class="total" style="margin-bottom:10px">Vendas <b>Flex/Agência</b> dão baixa automática no <b>Estoque SP</b> (remessa mais antiga primeiro) e voltam ao estoque se o pedido for cancelado. Vendas <b>Full</b> não mexem no estoque do sistema. O saldo do Estoque SP é enviado aos anúncios Flex/Agência vinculados.</div>
-  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_conectar">+ Conectar conta do ML</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>
-  <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
-    <div class="meta">Conectada em ${fts(c.conectado_em)}${c.ultima_sync?' · anúncios lidos em '+fts(c.ultima_sync):''}</div></div>${c.ativo?`<div class="dir"><button class="small" data-mldesc="${c.id}">Desconectar</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhuma conta conectada ainda.</div>'}</div>
+  <div class="barra" style="flex-wrap:wrap"><button class="primary" data-act="ml_olist">Buscar pedidos da Olist agora</button><button data-act="ml_conectar">+ Conectar conta do ML (direto)</button><button data-act="ml_sincronizar">Sincronizar anúncios</button><button data-act="ml_pedidos">Buscar pedidos</button><button data-act="ml_enviar_estoque">Enviar estoque ao ML</button></div>${olTxt}
+  <div class="lista" style="margin-bottom:12px">${contas.length?contas.map(c=>`<div class="card"><div><div class="t">${esc(c.apelido||c.id)} ${c.id<0?'<span class="badge b-rec">Via Olist</span>':c.ativo?'<span class="badge b-rec">Conectada</span>':'<span class="badge b-can">Desconectada</span>'}</div>
+    <div class="meta">Conectada em ${fts(c.conectado_em)}${c.ultima_sync?' · anúncios lidos em '+fts(c.ultima_sync):''}</div></div>${c.ativo&&c.id>0?`<div class="dir"><button class="small" data-mldesc="${c.id}">Desconectar</button></div>`:''}</div>`).join(''):'<div class="vazio">Nenhuma conta conectada ainda.</div>'}</div>
   <div class="resumo"><div class="kpi"><div class="n">${un(an.length)}</div><div class="l">Anúncios</div></div><div class="kpi"><div class="n">${un(semV.length)}</div><div class="l">Sem produto vinculado</div></div>
    <div class="kpi"><div class="n">${un(ped.filter(p=>p.situacao==='baixado').length)}</div><div class="l">Pedidos baixados</div></div><div class="kpi"><div class="n">${un(prob.length)}</div><div class="l">Pedidos com pendência</div></div></div>
   ${barraBusca('Buscar pedido, anúncio, SKU…')}
@@ -1252,6 +1253,7 @@ $('app').addEventListener('click',async e=>{
       if(a==='ml_conectar'){location.href=r.url;return;}
       if(a==='ml_sincronizar')toast('Anúncios: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.anuncios+' lidos, '+x.vinculados+' vinculados')).join(' | '));
       if(a==='ml_pedidos')toast('Pedidos: '+Object.values(r).map(x=>x.erro?('erro: '+x.erro):(x.pedidos+' conferidos')).join(' | '));
+      if(a==='ml_olist')toast('Olist: '+r.pedidos+' pedido(s) lido(s)'+(r.baixado?' · '+r.baixado+' baixado(s)':'')+(r.erros&&r.erros.length?' · erro: '+r.erros[0]:''));
       if(a==='ml_enviar_estoque')toast(r.atualizados+' anúncio(s) atualizado(s)'+(r.erros.length?' · '+r.erros.length+' erro(s): '+r.erros[0]:''));
       await carregar();}catch(err){toast(msgErro(err));}
     t.disabled=false;t.textContent=txt;return;}

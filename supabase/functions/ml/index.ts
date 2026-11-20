@@ -101,7 +101,7 @@ async function enviarEstoque(produtos: number[] | null) {
   const { data: saldo, error } = await sb.rpc("ml_estoque_sp");
   if (error) throw error;
   const sp = new Map<number, number>(); (saldo || []).forEach((s: any) => sp.set(s.produto_id, Math.max(0, s.qtd)));
-  let q = sb.from("ml_anuncios").select("*").not("produto_id", "is", null).neq("logistica", "fulfillment").in("status", ["active", "paused"]);
+  let q = sb.from("ml_anuncios").select("*").gt("conta_id", 0).not("produto_id", "is", null).neq("logistica", "fulfillment").in("status", ["active", "paused"]);
   if (produtos) q = q.in("produto_id", produtos);
   const { data: an } = await q;
   const porItem = new Map<string, any[]>(); (an || []).forEach((a: any) => { const l = porItem.get(a.item_id) || []; l.push(a); porItem.set(a.item_id, l); });
@@ -162,6 +162,80 @@ async function buscarPedidos(contaId: number, dias = 3) {
   return { pedidos: n };
 }
 
+// ---------- Olist ERP (pedidos do ML importados pela Olist) ----------
+const OLIST = "https://api.tiny.com.br/api2/";
+const PAGO = /aprovad|preparando|faturad|pronto|enviad|entregue/i;
+async function olist(metodo: string, params: Record<string, string>) {
+  const tk = Deno.env.get("OLIST_TOKEN");
+  if (!tk) throw new Error("O token da Olist ainda não foi salvo no servidor (segredo OLIST_TOKEN).");
+  const body = new URLSearchParams({ token: tk, formato: "json", ...params });
+  for (let t = 0; t < 3; t++) {
+    const r = await fetch(OLIST + metodo, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body });
+    const j = await r.json().catch(() => ({}));
+    const ret = j.retorno || {};
+    if (ret.status === "OK") return ret;
+    const erro = (ret.erros || []).map((e: any) => e.erro).join("; ");
+    if (/registro|nenhum|n[aã]o encontr/i.test(erro) || ret.codigo_erro === "20") return { pedidos: [] };
+    if (ret.codigo_erro === "6" || /limite|bloquead/i.test(erro)) { await new Promise((ok) => setTimeout(ok, 20000)); continue; }
+    throw new Error("Olist: " + (erro || r.status));
+  }
+  throw new Error("Olist: limite de chamadas atingido, tenta de novo em 1 minuto.");
+}
+const dataBR = (d: Date) => { const z = (n: number) => String(n).padStart(2, "0"); const b = new Date(d.getTime() - 3 * 3600e3);
+  return `${z(b.getUTCDate())}/${z(b.getUTCMonth() + 1)}/${b.getUTCFullYear()} ${z(b.getUTCHours())}:${z(b.getUTCMinutes())}:${z(b.getUTCSeconds())}`; };
+function contaOlist(nome: string) { let h = 0; for (const c of nome) h = (h * 31 + c.charCodeAt(0)) | 0; return -Math.abs(h || 1); }
+async function olistSync(desdeHoras: number | null) {
+  const { data: est } = await sb.from("ml_olist_estado").select("*").eq("id", 1).maybeSingle();
+  const inicio = new Date();
+  const desde = desdeHoras ? new Date(Date.now() - desdeHoras * 3600e3) : new Date(est?.ultima || Date.now() - 24 * 3600e3);
+  desde.setMinutes(desde.getMinutes() - 10);
+  const { data: prods } = await sb.from("produtos").select("id,sku");
+  const porCod = new Map<string, number>();
+  (prods || []).forEach((p: any) => { if (p.sku) String(p.sku).split(/[\/,;]/).forEach((x) => x.trim() && porCod.set(norm(x), p.id)); });
+  let n = 0, pagina = 1; const res: Record<string, number> = {}; const erros: string[] = [];
+  while (pagina <= 20) {
+    const r = await olist("pedidos.pesquisa.php", { dataAtualizacao: dataBR(desde), pagina: String(pagina) });
+    for (const x of r.pedidos || []) {
+      try {
+        const o = (await olist("pedido.obter.php", { id: String(x.pedido.id) })).pedido;
+        const canal = String(o.ecommerce?.nomeEcommerce || "");
+        const numML = String(o.ecommerce?.numeroPedidoEcommerce || o.numero_ecommerce || "").replace(/\D/g, "");
+        if (!numML || !(/mercado|ml|nexx/i.test(canal) || /mercado/i.test(JSON.stringify(o.ecommerce || {})))) continue;
+        const contaId = contaOlist(canal || "Mercado Livre");
+        await sb.from("ml_contas").upsert({ id: contaId, apelido: (canal || "Mercado Livre") + " (Olist)", ativo: false });
+        const texto = [o.forma_envio, o.forma_frete, o.obs, o.obs_interna, JSON.stringify(o.marcadores || ""), JSON.stringify(o.ecommerce || "")].join(" ");
+        const full = /fulfill|\bfull\b/i.test(texto);
+        const logistica = full ? "fulfillment" : (o.forma_frete || o.forma_envio || null);
+        const itens = [];
+        for (const it of (o.itens || []).map((i: any) => i.item)) {
+          const cod = String(it.codigo || it.id_produto || it.descricao).trim();
+          const item_id = "SKU:" + cod;
+          const { data: ja } = await sb.from("ml_anuncios").select("produto_id,vinculo_manual").eq("item_id", item_id).eq("variacao_id", 0).maybeSingle();
+          if (!ja) await sb.from("ml_anuncios").insert({ item_id, variacao_id: 0, conta_id: contaId, titulo: it.descricao, sku: cod, produto_id: porCod.get(norm(cod)) || null, logistica: "olist", status: "olist" });
+          else if (!ja.produto_id && !ja.vinculo_manual && porCod.get(norm(cod))) await sb.from("ml_anuncios").update({ produto_id: porCod.get(norm(cod)) }).eq("item_id", item_id).eq("variacao_id", 0);
+          itens.push({ item_id, variacao_id: 0, titulo: it.descricao, qtd: Math.round(Number(it.quantidade) || 0) });
+        }
+        const id = Number(numML);
+        const { data: atual } = await sb.from("ml_pedidos").select("situacao").eq("id", id).maybeSingle();
+        const dt = String(o.data_pedido || "").split("/");
+        const reg: any = { id, conta_id: contaId, status: o.situacao, logistica, data: dt.length === 3 ? `${dt[2]}-${dt[1]}-${dt[0]}T12:00:00-03:00` : null,
+          total: Number(o.total_pedido || 0), comprador: o.cliente?.nome || null, itens, atualizado_em: new Date().toISOString() };
+        if (!atual) reg.situacao = full ? "full" : "pendente";
+        await sb.from("ml_pedidos").upsert(reg);
+        let s: string | undefined;
+        if (/cancel/i.test(o.situacao)) s = (await sb.rpc("ml_estornar_pedido", { p_pedido: id })).data;
+        else if (!full && PAGO.test(o.situacao)) { const q = await sb.rpc("ml_baixar_pedido", { p_pedido: id }); if (q.error) throw q.error; s = q.data; }
+        else s = reg.situacao || atual?.situacao;
+        res[s || "?"] = (res[s || "?"] || 0) + 1; n++;
+      } catch (e) { erros.push(x.pedido?.numero + ": " + (e as Error).message); }
+    }
+    if (!r.numero_paginas || pagina >= Number(r.numero_paginas)) break;
+    pagina++;
+  }
+  await sb.from("ml_olist_estado").upsert({ id: 1, ultima: inicio.toISOString(), resultado: { pedidos: n, ...res, erros: erros.slice(0, 5) } });
+  return { pedidos: n, ...res, erros };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
@@ -189,11 +263,18 @@ Deno.serve(async (req) => {
       }
       return json({ ok: true });
     }
+    // agendador do banco (a cada 5 min)
+    if (rota === "olist-cron") {
+      const { data: k } = await sb.from("ml_cron").select("chave").eq("id", 1).maybeSingle();
+      if (!k || req.headers.get("x-cron") !== k.chave) return json({ error: "não autorizado" }, 401);
+      return json(await olistSync(null).catch((e) => ({ erro: e.message })));
+    }
     // ações do administrador
     const user = await exigirAdmin(req);
-    if (!CID() || !CSEC()) throw new Error("O aplicativo do Mercado Livre ainda não foi configurado no servidor.");
     const b = await req.json().catch(() => ({}));
-    const contas = async () => ((await sb.from("ml_contas").select("id").eq("ativo", true)).data || []).map((c: any) => c.id).filter((id: number) => !b.conta || id === b.conta);
+    if (b.acao === "olist") return json(await olistSync(b.horas || null));
+    if (!CID() || !CSEC()) throw new Error("O aplicativo do Mercado Livre ainda não foi configurado no servidor.");
+    const contas = async () => ((await sb.from("ml_contas").select("id").eq("ativo", true).gt("id", 0)).data || []).map((c: any) => c.id).filter((id: number) => !b.conta || id === b.conta);
     if (b.acao === "conectar") {
       const state = crypto.randomUUID();
       await sb.from("ml_estados").insert({ state, user_id: user.id });
